@@ -6,7 +6,7 @@ from threading import *
 
 import excelProcess,dataAnalyze
 
-class Log():
+class Log(object):
 
     def __init__(self, filenameRead, filenameWrite):
         self.filenameRead = filenameRead
