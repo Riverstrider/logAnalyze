@@ -4,7 +4,7 @@ from xlwt import *
 
 
 
-class Excel():
+class Excel(object):
 
     def __init__(self):
         self.wbk = 0
