@@ -2,7 +2,7 @@
 
 from tkMessageBox import *
 
-class Data():
+class Data(object):
 
     def __init__(self):
         pass
