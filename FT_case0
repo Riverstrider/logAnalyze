@@ -1,1 +1,3246 @@
 the old FT_case0 code is:
+
+// GenScheInfoTestDlg.cpp : implementation file
+//
+
+#include "stdafx.h"
+#include "GenScheInfoTest.h"
+#include "GenScheInfoTestDlg.h"
+#include "ManuConfig.h"
+#include "ReadEnviro.h"
+#include "DspDataTest.h"
+#include "DspMemReadWrite.h"
+#include "Function.h"
+#include "variable.h"
+#include <fstream.h>
+#include "SIM_UPLINK\ATP_SIM_UPLINK.h"
+
+#ifdef _DEBUG
+#define new DEBUG_NEW
+#undef THIS_FILE
+static char THIS_FILE[] = __FILE__;
+#endif
+
+extern CGenScheInfoTestApp theApp;
+/////////////////////////////////////////////////////////////////////////////
+// CAboutDlg dialog used for App About
+
+class CAboutDlg : public CDialog
+{
+public:
+	CAboutDlg();
+	//UpdateLog(char* strin);
+
+// Dialog Data
+	//{{AFX_DATA(CAboutDlg)
+	enum { IDD = IDD_ABOUTBOX };
+	//}}AFX_DATA
+
+	// ClassWizard generated virtual function overrides
+	//{{AFX_VIRTUAL(CAboutDlg)
+	protected:
+	virtual void DoDataExchange(CDataExchange* pDX);    // DDX/DDV support
+	//}}AFX_VIRTUAL
+
+// Implementation
+protected:
+	//{{AFX_MSG(CAboutDlg)
+	//}}AFX_MSG
+	DECLARE_MESSAGE_MAP()
+};
+
+CAboutDlg::CAboutDlg() : CDialog(CAboutDlg::IDD)
+{
+	//{{AFX_DATA_INIT(CAboutDlg)
+	//}}AFX_DATA_INIT
+}
+
+void CAboutDlg::DoDataExchange(CDataExchange* pDX)
+{
+	CDialog::DoDataExchange(pDX);
+	//{{AFX_DATA_MAP(CAboutDlg)
+	//}}AFX_DATA_MAP
+}
+
+BEGIN_MESSAGE_MAP(CAboutDlg, CDialog)
+	//{{AFX_MSG_MAP(CAboutDlg)
+		// No message handlers
+	//}}AFX_MSG_MAP
+END_MESSAGE_MAP()
+
+/////////////////////////////////////////////////////////////////////////////
+// CGenScheInfoTestDlg dialog
+
+CGenScheInfoTestDlg::CGenScheInfoTestDlg(CWnd* pParent /*=NULL*/)
+	: CDialog(CGenScheInfoTestDlg::IDD, pParent)
+{
+	//{{AFX_DATA_INIT(CGenScheInfoTestDlg)
+	m_GenbinFlg = FALSE;
+	m_GenConfigFlg = FALSE;
+	m_GendatFlg = FALSE;
+	m_Progress = _T("");
+	m_FilePath_Out = _T("");
+	m_GenExelFlg = FALSE;
+	//}}AFX_DATA_INIT
+	// Note that LoadIcon does not require a subsequent DestroyIcon in Win32
+	m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
+}
+
+void CGenScheInfoTestDlg::DoDataExchange(CDataExchange* pDX)
+{
+	CDialog::DoDataExchange(pDX);
+	//{{AFX_DATA_MAP(CGenScheInfoTestDlg)
+	DDX_Control(pDX, IDC_TAB1, m_tabctrl);
+	DDX_Check(pDX, IDC_GENBIN, m_GenbinFlg);
+	DDX_Check(pDX, IDC_GENCONFIG, m_GenConfigFlg);
+	DDX_Check(pDX, IDC_GENDAT, m_GendatFlg);
+	DDX_Text(pDX, IDC_EDIT1, m_Progress);
+	DDX_Text(pDX, IDC_EDIT_OUTPUTPATH, m_FilePath_Out);
+	DDX_Check(pDX, IDC_GENEXEL, m_GenExelFlg);
+	//}}AFX_DATA_MAP
+}
+
+BEGIN_MESSAGE_MAP(CGenScheInfoTestDlg, CDialog)
+	//{{AFX_MSG_MAP(CGenScheInfoTestDlg)
+	ON_WM_SYSCOMMAND()
+	ON_WM_PAINT()
+	ON_WM_QUERYDRAGICON()
+	ON_NOTIFY(TCN_SELCHANGE, IDC_TAB1, OnSelchangeTab1)
+	ON_BN_CLICKED(IDC_GENBIN, OnGenbin)
+	ON_BN_CLICKED(IDC_GENCONFIG, OnGenconfig)
+	ON_BN_CLICKED(IDC_GENDAT, OnGendat)
+	ON_BN_CLICKED(IDC_BUTTONOUTPUT, OnButtonoutput)
+	ON_BN_CLICKED(IDC_GENEXEL, OnGenexel)
+	//}}AFX_MSG_MAP
+END_MESSAGE_MAP()
+
+/////////////////////////////////////////////////////////////////////////////
+// CGenScheInfoTestDlg message handlers
+
+BOOL CGenScheInfoTestDlg::OnInitDialog()
+{
+	CRect r;
+	CDialog::OnInitDialog();
+
+	// Add "About..." menu item to system menu.
+
+	// IDM_ABOUTBOX must be in the system command range.
+	ASSERT((IDM_ABOUTBOX & 0xFFF0) == IDM_ABOUTBOX);
+	ASSERT(IDM_ABOUTBOX < 0xF000);
+
+	CMenu* pSysMenu = GetSystemMenu(FALSE);
+	if (pSysMenu != NULL)
+	{
+		CString strAboutMenu;
+		strAboutMenu.LoadString(IDS_ABOUTBOX);
+		if (!strAboutMenu.IsEmpty())
+		{
+			pSysMenu->AppendMenu(MF_SEPARATOR);
+			pSysMenu->AppendMenu(MF_STRING, IDM_ABOUTBOX, strAboutMenu);
+		}
+	}
+
+	// Set the icon for this dialog.  The framework does this automatically
+	//  when the application's main window is not a dialog
+	SetIcon(m_hIcon, TRUE);			// Set big icon
+	SetIcon(m_hIcon, FALSE);		// Set small icon
+	
+	// TODO: Add extra initialization here
+	m_tabctrl.InsertItem(0,"参数导入");
+	m_tabctrl.InsertItem(1,"手动配置");
+	m_tabctrl.InsertItem(2,"数据转换");
+	m_tabctrl.InsertItem(3,"DSP灌数");
+	m_readenviro.Create(IDD_READENVIRODATA,&m_tabctrl);
+	m_manuconfig.Create(IDD_MANUCONFIG,&m_tabctrl);
+	m_datareform.Create(IDD_DATAREFORM,&m_tabctrl);
+	m_dspdatatest.Create(IDD_DATATEST,&m_tabctrl);
+	
+	m_tabctrl.GetClientRect(&r);
+	m_readenviro.SetWindowPos(NULL,10,30,r.right -20,r.bottom -40,SWP_SHOWWINDOW);
+	m_manuconfig.SetWindowPos(NULL,10,30,r.right -20,r.bottom -40,SWP_HIDEWINDOW);
+	m_datareform.SetWindowPos(NULL,10,30,r.right -20,r.bottom -40,SWP_HIDEWINDOW);
+	m_dspdatatest.SetWindowPos(NULL,10,30,r.right -20,r.bottom -40,SWP_HIDEWINDOW);
+
+	return TRUE;  // return TRUE  unless you set the focus to a control
+}
+
+void CGenScheInfoTestDlg::OnSysCommand(UINT nID, LPARAM lParam)
+{
+	if ((nID & 0xFFF0) == IDM_ABOUTBOX)
+	{
+		CAboutDlg dlgAbout;
+		dlgAbout.DoModal();
+	}
+	else
+	{
+		CDialog::OnSysCommand(nID, lParam);
+	}
+}
+
+// If you add a minimize button to your dialog, you will need the code below
+//  to draw the icon.  For MFC applications using the document/view model,
+//  this is automatically done for you by the framework.
+
+void CGenScheInfoTestDlg::OnPaint() 
+{
+	if (IsIconic())
+	{
+		CPaintDC dc(this); // device context for painting
+
+		SendMessage(WM_ICONERASEBKGND, (WPARAM) dc.GetSafeHdc(), 0);
+
+		// Center icon in client rectangle
+		int cxIcon = GetSystemMetrics(SM_CXICON);
+		int cyIcon = GetSystemMetrics(SM_CYICON);
+		CRect rect;
+		GetClientRect(&rect);
+		int x = (rect.Width() - cxIcon + 1) / 2;
+		int y = (rect.Height() - cyIcon + 1) / 2;
+
+		// Draw the icon
+		dc.DrawIcon(x, y, m_hIcon);
+	}
+	else
+	{
+		CDialog::OnPaint();
+	}
+}
+
+// The system calls this to obtain the cursor to display while the user drags
+//  the minimized window.
+HCURSOR CGenScheInfoTestDlg::OnQueryDragIcon()
+{
+	return (HCURSOR) m_hIcon;
+}
+
+void CGenScheInfoTestDlg::OnSelchangeTab1(NMHDR* pNMHDR, LRESULT* pResult) 
+{
+	// TODO: Add your control notification handler code here
+	CRect r;
+	m_tabctrl.GetClientRect(&r);
+
+	switch(m_tabctrl.GetCurSel())
+	{
+	case 0:
+		m_readenviro.SetWindowPos(NULL,10,20,r.right -20,r.bottom -40,SWP_SHOWWINDOW);
+		m_manuconfig.SetWindowPos(NULL,10,20,r.right -20,r.bottom -40,SWP_HIDEWINDOW);
+		m_datareform.SetWindowPos(NULL,10,20,r.right -20,r.bottom -40,SWP_HIDEWINDOW);
+		m_dspdatatest.SetWindowPos(NULL,10,20,r.right -20,r.bottom -40,SWP_HIDEWINDOW);
+		break;
+	case 1:
+		m_readenviro.SetWindowPos(NULL,10,20,r.right -20,r.bottom -40,SWP_HIDEWINDOW);
+		m_manuconfig.SetWindowPos(NULL,10,20,r.right -20,r.bottom -40,SWP_SHOWWINDOW);
+		m_datareform.SetWindowPos(NULL,10,20,r.right -20,r.bottom -40,SWP_HIDEWINDOW);
+		m_dspdatatest.SetWindowPos(NULL,10,20,r.right -20,r.bottom -40,SWP_HIDEWINDOW);
+		break;
+	case 2:
+		m_readenviro.SetWindowPos(NULL,10,20,r.right -20,r.bottom -40,SWP_HIDEWINDOW);
+		m_manuconfig.SetWindowPos(NULL,10,20,r.right -20,r.bottom -40,SWP_HIDEWINDOW);
+		m_datareform.SetWindowPos(NULL,10,20,r.right -20,r.bottom -40,SWP_SHOWWINDOW);
+		m_dspdatatest.SetWindowPos(NULL,10,20,r.right -20,r.bottom -40,SWP_HIDEWINDOW);
+		break;
+	case 3:
+		m_readenviro.SetWindowPos(NULL,10,20,r.right -20,r.bottom -40,SWP_HIDEWINDOW);
+		m_manuconfig.SetWindowPos(NULL,10,20,r.right -20,r.bottom -40,SWP_HIDEWINDOW);
+		m_datareform.SetWindowPos(NULL,10,20,r.right -20,r.bottom -40,SWP_HIDEWINDOW);
+		m_dspdatatest.SetWindowPos(NULL,10,20,r.right -20,r.bottom -40,SWP_SHOWWINDOW);
+		break;
+	default:
+		break;
+	}
+	
+	*pResult = 0;
+}
+
+void CGenScheInfoTestDlg::OnGenbin() 
+{
+	// TODO: Add your control notification handler code here
+	m_GenbinFlg = 1;
+}
+
+void CGenScheInfoTestDlg::OnGenconfig() 
+{
+	// TODO: Add your control notification handler code here
+	m_GenConfigFlg = 1;
+}
+
+void CGenScheInfoTestDlg::OnGendat() 
+{
+	// TODO: Add your control notification handler code here
+	m_GendatFlg = 1;
+}
+
+
+void CGenScheInfoTestDlg::UpdateLog(CString  *strprint)
+{
+	CGenScheInfoTestDlg *pDlg = (CGenScheInfoTestDlg *)(theApp.m_pMainWnd);
+	CEdit* pEdit = (CEdit*)pDlg->GetDlgItem(IDC_EDIT1);
+	
+	m_Progress = m_Progress + *strprint;
+	pEdit->SetWindowText(m_Progress);
+	pEdit->LineScroll(pEdit->GetLineCount());
+	
+	UpdateWindow();
+// 	UpdateData(TRUE);
+// 	m_Progress = m_Progress + *strprint;
+// 	UpdateData(FALSE);	
+}
+
+
+void CGenScheInfoTestDlg::OnOK() 
+{
+	// TODO: Add extra validation here
+	
+	FILE *fp;
+	CFileFind  tempFind;
+	CFileFind  aCtempFind;
+	CFileFind  pRachtempFind;
+	CFileFind  pPUCCHtempFind;
+	CFileFind  FileCaseFind;
+	BOOL  bFound,bAcFlag,bPrachFlag,bAcTmpFlag;
+	BOOL bAllFileFindFlg = 0;
+	BOOL bFoundScheInfo = 0;
+	BOOL bFoundLram = 0;
+	BOOL bFoundAC = 0;
+	BOOL bAllDataReduction = 0;
+	CString strprint;
+	CString strprint1;
+	CString strprint2;
+	CString str;
+	CString str1;
+	CString str2;
+	CString strFileLen;
+	CString strcell;
+	CString  cFilePath_Out;
+	CString  cFileNameExt;
+    CString  cFileNameOrig;
+	CString  cFileRootPath;
+    CString  cFileTemp;
+	CString  cFileTmpPath;
+	CString  cFilePath_tmp;
+	CString cFilePath_tmp2;
+	CString cFileTimeExt_tmp;
+	CString  cFileCoreInfo;
+	CString  cFileHeader;
+	CString  cFileInPath;
+	CString cTempPath;
+	CString  cStrTime;
+	CString  cFileTimeExt;
+	CString cFileExt;
+	CString cErrorlog;
+	int  dSubFrmIdx;
+	int  dCellIdx;
+	int  dDataReady = 0;
+	int  dRecoverCase0Flg = 0;
+	int  dFileCnt = 0;
+	int  dCaseCnt = 0;
+	int  dCaseOKCnt = 0;
+	int  dCaseErrCnt = 0;
+	int dCaseOverTimeCnt = 0;
+	int  dCaseAbnormalCnt = 0;
+	int	dAcCasePassCnt = 0;
+	int	dAcCaseAbnormalCnt = 0;
+	int dAcCaseOverTimeCnt = 0;
+	int	dAcCaseFailCnt = 0;
+	int	dAcCaseRealCnt=0;
+	int dAcFileCnt = 0;
+	int dEachFileCaseCnt=0;
+	int dEachFileCaseAbnormalCnt=0;
+	int dEachFileCaseOkCnt=0;
+	int dEachFileCaseErrCnt = 0;
+	int dEachFileCaseOverTimeCnt = 0;
+	int dCaseFileIdx = 0;
+	int  dLoopCnt = 0;
+	int  dFindPos;
+	int  dCaseIdx;
+	int  dMimoFlg;
+	int  ret = 0;
+	int  dCellIdxDSP;
+	UINT16 wSfnSubFrm;       /* 空口帧号子帧号 */
+	UCHAR  ucDuplexType;
+	UCHAR  ucUlDlConfig;
+	UCHAR  ucUpSfnFlg;
+	UCHAR ucAntIdx;
+	UCHAR  ucGenDataFlg = 1;
+	UINT32  dFrmNo;
+	UINT32  dSubFrmNo; 
+	INT32 dPreamformat;
+	INT32   dSrsFlg = 0;
+	T_Cmac2PulmDspCellDemInfo *ptScheInfo;
+	T_Cmac2PulmDspCellDemInfo *ptTmpScheInfo;
+	int  adCellNum[100];
+	int  adRachCellNum[100];
+         char strTime[1024];         
+		 char sPath[2][1024];
+	T_PucchCasePara tPucchCasePara;
+	//T_PucchCasePara  tPucchCasePara;
+	
+	memset(adCellNum,0,sizeof(adCellNum));
+	memset(adRachCellNum,0,sizeof(adRachCellNum));
+	if(1 == m_GenConfigFlg)
+	{
+		strprint = "\r\nInitMcrAndLib 初始化开始 \r\n";
+		UpdateLog(&strprint);
+		InitMcrAndLib();
+		strprint = "InitMcrAndLib 初始化完成 \r\n";
+		UpdateLog(&strprint);
+	}
+	switch(m_tabctrl.GetCurSel())
+	{
+	case 0:
+		{
+			strprint = "开始参数读取\r\n\r\n";
+			UpdateLog(&strprint);
+			
+/*			
+			cFileTmpPath = m_readenviro.m_FileTileArray[0].Left(m_readenviro.m_FileTileArray[0].ReverseFind('\\'));
+			bFound = tempFind.FindFile(cFileTmpPath + _T("\\*.xls"));
+			while(bFound)
+			{
+				bFound = tempFind.FindNextFile();
+				// skip . and .. files; otherwise, we'd
+				// recur infinitely!
+				if (tempFind.IsDots() || tempFind.IsDirectory())
+					continue;
+				CString DataFile = tempFind.GetFilePath() ;
+				cFilePath_Out = tempFind.GetFileName();
+			}*/
+
+			dLoopCnt = 0;
+			dCaseCnt = 0;
+			cFileTmpPath = m_readenviro.m_FileTileArray[0].Left(m_readenviro.m_FileTileArray[0].ReverseFind('\\'));
+			cFileNameExt = m_readenviro.m_FileTileArray[0].Right(3);
+			// m_readenviro.m_AllDatFlg = 0;//single:-1,loop:0
+
+			 bPrachFlag = pRachtempFind.FindFile(cFileTmpPath + _T("\\Prach_*.xls"));
+			 if(1 == bPrachFlag)
+			{
+				m_manuconfig.m_prachtestflg = 1;
+			}
+			 else
+			 {
+				  m_manuconfig.m_prachtestflg = 0;
+			 }
+			 			  
+			if(0 == m_readenviro.m_AllDatFlg)
+			{
+				if(1 == m_manuconfig.m_prachtestflg)
+				{
+					bFound = 0;
+				}
+				else
+				{
+					bFound = tempFind.FindFile(cFileTmpPath + _T("\\*.xls"));
+				}
+				
+			}
+			else
+			{
+				bFound = 0;
+				bPrachFlag = 0;
+			}
+			bAcFlag =  aCtempFind.FindFile(cFileTmpPath + _T("\\AC_*.xls"));
+		             if ((pPUCCHtempFind.FindFile(cFileTmpPath + _T("\\PUCCH_*.xls")) )||(pPUCCHtempFind.FindFile(cFileTmpPath + _T("\\AtpParas_Pucch*.xls"))) )
+			{
+			       gucReadExcelCaseNum = 128;
+			        gucWriteExcelCaseNum = 128;
+			}	
+			else
+			{
+			       gucReadExcelCaseNum = 64;
+				 gucWriteExcelCaseNum = 64;
+			}
+			memset(&gatScheInfoDdrVC[0][0],0,sizeof(gatScheInfoDdrVC));
+			while((0 != m_readenviro.m_FileTileArray[dLoopCnt].GetLength()) || (1 == bFound) || (1 == bPrachFlag))
+			{	
+           		   	//  m_readenviro.m_AllDatFlg = 0;//single:注释掉,loop:fangka
+				if(cFileNameExt == "bin")
+				{
+					fp = fopen(m_readenviro.m_FileTileArray[dLoopCnt],"r+b");
+					ReadData(fp,&gatScheInfoDdrDSP[dLoopCnt][0]);  //gatScheInfoDdr	
+					fclose(fp);
+				}
+				else if(cFileNameExt == "dat")
+				{
+				
+					if(0 == m_readenviro.m_AllDatFlg)
+					{
+						if(1 == m_manuconfig.m_prachtestflg)
+						{
+							bPrachFlag = pRachtempFind.FindNextFile();
+								// skip . and .. files; otherwise, we'd
+								// recur infinitely!
+							if (pRachtempFind.IsDots() || pRachtempFind.IsDirectory())
+							continue;
+							cFileInPath = pRachtempFind.GetFilePath() ;
+						}
+						else
+						{
+							bFound = tempFind.FindNextFile();
+							// skip . and .. files; otherwise, we'd
+							// recur infinitely!
+							if (tempFind.IsDots() || tempFind.IsDirectory())
+							continue;
+							cFileInPath = tempFind.GetFilePath() ;
+						}	
+					}
+					else
+					{
+						cFileInPath = m_readenviro.m_FileTileArray[dLoopCnt];
+					}
+					fp = fopen(cFileInPath,"r+b");
+					if(FALSE != TxtSearchByte(fp, 'M'))
+					{
+						fseek(fp,0L,0);
+						memset(&gatVCParaRecd[dLoopCnt][0],0,6*sizeof(T_FTCasePara));
+						memset(&gatScheInfoDdrVC[dLoopCnt][0],0,6*sizeof(T_Cmac2PulmDspCellDemInfo));
+						memset(&gtScheVCdat,0,sizeof(T_ATPPara));						
+						ReadPUCCHData(fp,&gtScheVCdat);
+						ReadPUCCHDataDemPara(&gtScheVCdat,&gatScheInfoDdrVC[dLoopCnt][0],&gatVCParaRecd[dLoopCnt][0]);  //gatScheInfoDdr
+					        ATP_GetTime(strTime);
+					       cFileTimeExt.Format("%s",strTime);
+						for(dCellIdx = 0; dCellIdx < MAX_CELL_NUM_ON_BOARD; dCellIdx++)
+						{
+							ScheInfoBigEndianReverse(&gatScheInfoDdrVC[dLoopCnt][dCellIdx],&gatScheInfoDdrDSP[dLoopCnt][dCellIdx]);
+							
+							if((1 == gatScheInfoDdrVC[dLoopCnt][dCellIdx].tCellDemInfo.ucCellState)
+								|| (2 == gatScheInfoDdrVC[dLoopCnt][dCellIdx].tCellDemInfo.ucCellState))
+							{
+								
+								wSfnSubFrm = gatScheInfoDdrVC[dLoopCnt][dCellIdx].tCellDemInfo.wSfnSubFrm;
+								adCellNum[dLoopCnt] ++;
+							}
+						}
+					}
+					else
+					{
+						fseek(fp,0L,0);
+						dFindPos = m_readenviro.m_FileTileArray[dLoopCnt].Find('x');
+						dFindPos = m_readenviro.m_FileTileArray[dLoopCnt].GetLength() - dFindPos -1;
+						str = m_readenviro.m_FileTileArray[dLoopCnt].Right(dFindPos);
+						dFindPos = str.Find('C');
+						str = str.Left(dFindPos);
+						dCellIdx = atoi(str);
+						ReadConfigData(fp,&gtPUSCHSimInfo[0]);
+
+					}
+					fclose(fp);
+				}
+				else if(cFileNameExt == "xls")
+				{
+					if(0 == m_readenviro.m_AllDatFlg)
+					{
+						if(1 == m_manuconfig.m_prachtestflg)
+						{
+							bPrachFlag = pRachtempFind.FindNextFile();
+								// skip . and .. files; otherwise, we'd
+								// recur infinitely!
+							if (pRachtempFind.IsDots() || pRachtempFind.IsDirectory())
+							continue;
+							cFileInPath = pRachtempFind.GetFilePath() ;
+						}
+						else
+						{
+							bFound = tempFind.FindNextFile();
+							// skip . and .. files; otherwise, we'd
+							// recur infinitely!
+							if (tempFind.IsDots() || tempFind.IsDirectory())
+							continue;
+							cFileInPath = tempFind.GetFilePath() ;
+						}	
+					}
+					else
+					{
+						cFileInPath = m_readenviro.m_FileTileArray[dLoopCnt];
+					}
+
+					cFileTimeExt = cFileInPath.Right(7);
+					cFileTimeExt = cFileTimeExt.Left(1);
+					if("_" == cFileTimeExt)
+					{
+						cFileTimeExt = cFileInPath.Right(21);
+						cFileTimeExt = cFileTimeExt.Left(17);
+					}
+					 else
+					 {
+					      ATP_GetTime(strTime);
+					      cFileTimeExt.Format("%s",strTime);
+					}
+					if(0 == m_manuconfig.m_prachtestflg)
+					{
+    					memset(&gatExcelScheInfo[0][0],0,sizeof(gatExcelScheInfo));
+    					ReadFromExcel(gatExcelScheInfo[0],cFileInPath,6);
+
+    					memset(&gatScheInfoDdrVC[dLoopCnt][0],0,sizeof(T_Cmac2PulmDspCellDemInfo)*MAX_CELL_NUM_ON_BOARD);
+    					memset(&gatVCParaRecd[dLoopCnt][0],0,sizeof(T_FTCasePara)*MAX_CELL_NUM_ON_BOARD);
+    					memset(&gatCmac2PulmAntAdjustScheInfoVC[dLoopCnt][0],0,sizeof(T_Cmac2PulmAntAdjustScheInfo)*MAX_CELL_NUM_ON_BOARD);
+               		      memset(&gatScheInfoDdrDSP[dLoopCnt][0],0,sizeof(T_Cmac2PulmDspCellDemInfo)*MAX_CELL_NUM_ON_BOARD);//yy
+
+    					ExelToScheInfo(gatExcelScheInfo[0],&gatScheInfoDdrVC[dLoopCnt][0],&gatCmac2PulmAntAdjustScheInfoVC[dLoopCnt][0],&gatVCParaRecd[dLoopCnt][0]);
+#if MeaBitMapRecov
+					BitmapTrans(&gatScheInfoDdrVC[dLoopCnt][0]);
+#endif
+    										
+    					for(dCellIdx = 0; dCellIdx < MAX_CELL_NUM_ON_BOARD; dCellIdx++)
+    					{
+    						if((1 == gatScheInfoDdrVC[dLoopCnt][dCellIdx].tCellDemInfo.ucCellState)
+    							|| (2 == gatScheInfoDdrVC[dLoopCnt][dCellIdx].tCellDemInfo.ucCellState))
+    						{
+    						    if(1 == gucCaseRecover)
+                                {
+                    				if(0 == gatScheInfoDdrVC[dLoopCnt][dCellIdx].tCellDemInfo.ucCellMode)  //临时代码，用于用例恢复
+                    				{
+                    					gatScheInfoDdrVC[dLoopCnt][dCellIdx].tCellDemInfo.ucULIQLink = 4 + (dCellIdx>>1) * 10;
+                    				}
+                    				else
+                    				{
+                    					gatScheInfoDdrVC[dLoopCnt][dCellIdx].tCellDemInfo.ucULIQLink = dCellIdx >> 1;
+                    				}
+                                }
+    							ScheInfoBigEndianReverse(&gatScheInfoDdrVC[dLoopCnt][dCellIdx],&gatScheInfoDdrDSP[dLoopCnt][dCellIdx]);
+    							wSfnSubFrm = gatScheInfoDdrVC[dLoopCnt][dCellIdx].tCellDemInfo.wSfnSubFrm;
+    							ScheInfoACBigEndianReverse(&gatCmac2PulmAntAdjustScheInfoVC[dLoopCnt][dCellIdx],&gatCmac2PulmAntAdjustScheInfoDSP[dLoopCnt][dCellIdx]);
+    							adCellNum[dLoopCnt] ++;
+						    }
+					    }					
+				    }
+    				else
+    				{
+    						memset(&gatExcelRACHInfo[0][0],0,sizeof(gatExcelRACHInfo));
+    						RachReadFromExcel(gatExcelRACHInfo[0],cFileInPath,6);
+							memset(&gatScheInfoDdrVC[dLoopCnt][0],0,sizeof(T_Cmac2PulmDspCellDemInfo)*MAX_CELL_NUM_ON_BOARD);
+	               		    memset(&gatScheInfoDdrDSP[dLoopCnt][0],0,sizeof(T_Cmac2PulmDspCellDemInfo)*MAX_CELL_NUM_ON_BOARD);
+    						memset(&gatLramInCellParaBuffer[dLoopCnt][0],0,sizeof(T_Cmac2PulmPrachDemInfo)*MAX_CELL_NUM_ON_BOARD);
+    						memset(&gatLramParamInfoFT[dLoopCnt][0],0,sizeof(T_PrachParamInfoTest)*MAX_CELL_NUM_ON_BOARD);
+						memset(&gatParamMsgInfoA[dLoopCnt],0,sizeof(T_PrachParamMsgInfo)*10*MAX_CELL_NUM_ON_BOARD);	
+						memset(&gatParamMsgInfoB[dLoopCnt],0,sizeof(T_PrachParamMsgInfo)*10*MAX_CELL_NUM_ON_BOARD);	
+    						RachExelToScheInfo(gatExcelRACHInfo[0],&gatScheInfoDdrVC[dLoopCnt][0],&gatLramInCellParaBuffer[dLoopCnt][0],&gatLramParamInfoFT[dLoopCnt][0], dLoopCnt);					
+						for(dCellIdx = 0; dCellIdx < MAX_CELL_NUM_ON_BOARD; dCellIdx++)
+    					{	
+
+						if(1 != (gatLramInCellParaBuffer[dLoopCnt][dCellIdx].ucCellEn & 0x1))
+						{
+							continue;
+						}
+						else
+						{
+							adRachCellNum[dLoopCnt] ++;
+							ScheInfoBigEndianReverse(&gatScheInfoDdrVC[dLoopCnt][dCellIdx],&gatScheInfoDdrDSP[dLoopCnt][dCellIdx]);
+							wSfnSubFrm = gatScheInfoDdrVC[dLoopCnt][dCellIdx].tCellDemInfo.wSfnSubFrm;
+						}
+					}
+    				}
+										
+				}
+				else
+				{
+					strprint = "输入数据类型错误!!\r\n\r\n";
+					UpdateLog(&strprint); 
+					//fclose(fp);
+					continue;				
+				}
+				
+				strprint1.Format("用例 Sfn%d 读取完成 \r\n",wSfnSubFrm);
+				UpdateLog(&strprint1);
+				
+				if((1 == m_GenConfigFlg) && (0== m_manuconfig.m_prachtestflg))
+				{
+					memset(&gtPUSCHSimInfo[0],0,sizeof(gtPUSCHSimInfo));
+					GenSimParaFile(&gatScheInfoDdrVC[dLoopCnt][0],&gatVCParaRecd[dLoopCnt][0]);
+
+					if(4 == gatVCParaRecd[dLoopCnt][0].dACCaseFlag)
+						{
+						cFileTmpPath = m_FilePath_Out.Left(m_FilePath_Out.ReverseFind('\\'));
+						str.Format("\\ACScheInfoSfn*_%s",cFileTimeExt);
+						 if(aCtempFind.FindFile(cFileTmpPath + str))
+						 {
+							 aCtempFind.FindNextFile();
+						 	if(aCtempFind.IsDirectory()) 
+						 	{				 		
+								cFileTmpPath = aCtempFind.GetFilePath();
+						 	}
+						 }
+						 else
+						 {
+						 
+							str.Format("\\ACScheInfoSfn%d_%s", gatScheInfoDdrVC[dLoopCnt][gtPUSCHSimInfo[dCellIdx].tinitParas.aucCellIdx[0]].tCellDemInfo.wSfnSubFrm, cFileTimeExt);
+							cFileTmpPath = cFileTmpPath + str;
+							if(CreateDirectory(cFileTmpPath, NULL))
+							{
+								CreateDirectory(cFileTmpPath, NULL);
+							}
+						 }
+						}
+					else 
+						{
+						cFileTmpPath = m_FilePath_Out.Left(m_FilePath_Out.ReverseFind('\\'));
+						}
+					
+					for(dCellIdx = 0; dCellIdx < MAX_CELL_NUM_ON_BOARD; dCellIdx++)
+					{
+						if(0 != gtPUSCHSimInfo[dCellIdx].tinitParas.ucCellNum)
+						{
+							str.Format("\\ConfigDataSfn%d_%s", gatScheInfoDdrVC[dLoopCnt][gtPUSCHSimInfo[dCellIdx].tinitParas.aucCellIdx[0]].tCellDemInfo.wSfnSubFrm, cFileTimeExt);
+							cFilePath_Out = cFileTmpPath + str;
+							if(CreateDirectory(cFilePath_Out, NULL))
+							{
+								CreateDirectory(cFilePath_Out, NULL);
+							}
+							
+							cFilePath_Out = cFileTmpPath + str + "\\SaveData";
+							CreateDirectory(cFilePath_Out, NULL);
+							cFileRootPath = cFileTmpPath + str;
+							m_readenviro.UpdateData(TRUE);
+							FTCreateDirectory(&gtPUSCHSimInfo[dCellIdx],&gatScheInfoDdrVC[dLoopCnt][0],cFileInPath,cFileRootPath,m_readenviro.m_datatype);			
+
+							cFileRootPath = cFileTmpPath + str;
+							str.Format("\\SaveData\\Cell%d\\ConfigData.dat",gtPUSCHSimInfo[dCellIdx].tinitParas.aucCellIdx[0]);
+							cFilePath_Out = cFileRootPath + str;
+							fp = fopen(cFilePath_Out,"w");
+							PrintSimFile(fp,&gtPUSCHSimInfo[dCellIdx]);
+							fclose(fp);
+							dFileCnt ++;
+						}
+					}
+					if(4 == gatVCParaRecd[dLoopCnt][0].dACCaseFlag)//小区0判断
+					{
+						ret = AcUpLinkLibCall(&gatScheInfoDdrVC[dLoopCnt][0],&gatCmac2PulmAntAdjustScheInfoVC[dLoopCnt][0],&gatVCParaRecd[dLoopCnt][0],&gtPUSCHSimInfo[0],cFileRootPath,1);
+						ret = ret&0x2000000;
+					}
+					else
+					{
+	                    ret = PuschUpLinkLibCall(&gatScheInfoDdrVC[dLoopCnt][0],&gatVCParaRecd[dLoopCnt][0],&gtPUSCHSimInfo[0],cFileRootPath,m_readenviro.m_datatype);
+					}
+				    if((0 == ret)||(0x10000 == ret ))
+					{
+							memset(&gatPuschDecResInfo[0][0],0,sizeof(gatPuschDecResInfo));
+							if(4 == gatVCParaRecd[dLoopCnt][0].dACCaseFlag)
+							{
+								ACDataReduction(&cFileTmpPath,&cFileTimeExt,&gatScheInfoDdrVC[dLoopCnt][0],gatCmac2PulmAntAdjustScheInfoVC[dLoopCnt][0].ucActive);	
+							}
+							//else if(1 == gatVCParaRecd[dLoopCnt][0].dSRSCaseFlag)
+							//{
+							 	//SRSDataReduction(&cFileTmpPath,&cFileTimeExt,&gatScheInfoDdrVC[dLoopCnt][0],&gatVCParaRecd[dLoopCnt][0]);
+							//}
+							else
+							{
+							DataReduction(&cFileTmpPath,&cFileTimeExt,&gatScheInfoDdrVC[dLoopCnt][0],&gatVCParaRecd[dLoopCnt][0],&gatPuschDecResInfo[0][0]);
+							}
+							strprint2.Format("    数据生成完毕，返回值 %x \r\n",ret);
+							UpdateLog(&strprint2);
+							UpdateWindow();
+					}
+					else
+					{
+						strprint2.Format("    数据生成异常 返回值 %x,%d\r\n",ret,dLoopCnt+1);
+						UpdateLog(&strprint2);
+						strprint2.Format("   异常路径%s\r\n",str);
+						UpdateLog(&strprint2);
+						UpdateWindow();
+					}
+
+						
+				}				
+                else if((1 == m_GenConfigFlg) && (1== m_manuconfig.m_prachtestflg))
+                {
+                    //yy add
+                    memset(&gtPrachSimInfo,0,sizeof(gtPrachSimInfo));
+	                RACHGenSimParaFile(&gatLramInCellParaBuffer[dLoopCnt][0],gatLramParamInfoFT[dLoopCnt]);
+				   	cFileTmpPath = m_FilePath_Out.Left(m_FilePath_Out.ReverseFind('\\'));
+				gtPrachSimInfo.tinitParas.SaveDataFlg = gdPrachSaveFlag;
+				for(dCellIdx = 0; dCellIdx < 1; dCellIdx++)
+    			{
+    						if(0 == (gatLramInCellParaBuffer[dLoopCnt][dCellIdx].ucCellEn & 0x1))
+						{
+							continue;
+						}
+    						
+    							str.Format("\\ConfigDataSfn%d_%s", wSfnSubFrm,cFileTimeExt);
+    							cFilePath_Out = cFileTmpPath + str;
+    							if(CreateDirectory(cFilePath_Out, NULL))
+    							{
+    								CreateDirectory(cFilePath_Out, NULL);
+    							}
+
+    							cFilePath_Out = cFilePath_Out+ "\\SaveData";
+    							CreateDirectory(cFilePath_Out, NULL);						      
+    							m_readenviro.UpdateData(TRUE);
+								
+					  		str.Format("\\Cell%d", gatLramInCellParaBuffer[dLoopCnt][dCellIdx].ucCellIdx);      
+                                                                                 
+
+							cFileRootPath = cFilePath_Out + str;                                              
+							if(CreateDirectory(cFileRootPath, NULL))
+    							{
+    								CreateDirectory(cFileRootPath, NULL);
+    							}                                                
+                                                                                    
+							cFilePath_Out = cFileRootPath + "\\Emulator";                                     
+							if(CreateDirectory(cFilePath_Out, NULL))
+    							{
+    								CreateDirectory(cFilePath_Out, NULL);
+    							}
+							sprintf(sPath[1],"%s",cFilePath_Out);
+							ATP_CreateSimDir(sPath[1],1024);                                                  
+	                                                                                  
+							cFilePath_Out = cFileRootPath  + "\\Dsp";                                   
+							if(CreateDirectory(cFilePath_Out, NULL))
+    							{
+    								CreateDirectory(cFilePath_Out, NULL);
+    							} 
+
+							str.Format("\\ConfigData.dat");
+							cFilePath_Out = cFileRootPath + str;
+							fp = fopen(cFilePath_Out,"w");
+							RachPrintSimFile(fp,&gtPrachSimInfo);
+
+							strcpy(gtPrachSimInfo.atcellParas[gatLramInCellParaBuffer[dLoopCnt][dCellIdx].ucCellIdx].acSimDataPath,cFileRootPath);					
+							fclose(fp);
+							dFileCnt ++;
+					}
+
+					 ret = PrachUpLinkLibCall(&gatLramInCellParaBuffer[dLoopCnt][0],&gtPrachSimInfo);
+
+                	}
+
+
+				if(0 == m_manuconfig.m_prachtestflg)
+				{
+    				if((1 == m_GendatFlg) && (0 != adCellNum[dLoopCnt]))
+    				{
+    					cFilePath_Out = m_FilePath_Out.Left(m_FilePath_Out.ReverseFind('\\'));
+    					if(4 == gatVCParaRecd[dLoopCnt][0].dACCaseFlag)
+    					{
+						str.Format("\\ACScheInfoSfn*_%s",cFileTimeExt);
+						 if(aCtempFind.FindFile(cFilePath_Out + str))
+						 {
+							 aCtempFind.FindNextFile();
+						 	if(aCtempFind.IsDirectory()) 
+						 	{				 		
+								cFilePath_Out = aCtempFind.GetFilePath();
+						 	}
+						 }
+						 else
+						 {
+						 
+							str.Format("\\ACScheInfoSfn%d_%s", gatScheInfoDdrVC[dLoopCnt][gtPUSCHSimInfo[dCellIdx].tinitParas.aucCellIdx[0]].tCellDemInfo.wSfnSubFrm, cFileTimeExt);
+							cFilePath_Out = cFilePath_Out + str;
+							if(CreateDirectory(cFilePath_Out, NULL))
+							{
+								CreateDirectory(cFilePath_Out, NULL);
+							}
+						 }
+    						AcWriteSchInfoMain(&gatScheInfoDdrVC[dLoopCnt][0],&gatScheInfoDdrDSP[dLoopCnt][0],&gatCmac2PulmAntAdjustScheInfoDSP[dLoopCnt][0],cFilePath_Out,&cFileTimeExt);
+    					}
+    					else
+    					{
+    					    WriteSchInfoMain(&gatScheInfoDdrVC[dLoopCnt][0],&gatScheInfoDdrDSP[dLoopCnt][0],cFilePath_Out, &cFileTimeExt,m_manuconfig.m_prachtestflg);	
+    					}
+    					strprint = "    解调消息、核分工生成完毕 \r\n";
+    					UpdateLog(&strprint);					
+    				}
+
+    				if((1 == m_GenExelFlg ) && (0!= adCellNum[dLoopCnt]))
+    				{	
+						cFilePath_Out = m_FilePath_Out.Left(m_FilePath_Out.ReverseFind('\\'));
+						if(4 == gatVCParaRecd[dLoopCnt][0].dACCaseFlag)
+    					{
+						if(1 == m_GenConfigFlg)
+						{
+							str.Format("\\ACScheInfoSfn*_%s",cFileTimeExt);
+							 if(aCtempFind.FindFile(cFilePath_Out + str))
+							 {
+								 aCtempFind.FindNextFile();
+							 	if(aCtempFind.IsDirectory()) 
+							 	{				 		
+									cFilePath_Out = aCtempFind.GetFilePath();
+							 	}
+							 }
+							 else
+							 {
+							 
+								str.Format("\\ACScheInfoSfn%d_%s", gatScheInfoDdrVC[dLoopCnt][gtPUSCHSimInfo[dCellIdx].tinitParas.aucCellIdx[0]].tCellDemInfo.wSfnSubFrm, cFileTimeExt);
+								cFilePath_Out = cFilePath_Out + str;
+								if(CreateDirectory(cFilePath_Out, NULL))
+								{
+									CreateDirectory(cFilePath_Out, NULL);
+								}
+							 }
+						}
+						if(1 == bAcFlag)
+						{
+							cFileTimeExt_tmp = cFileTimeExt ;
+						}
+						else if(3 == bAcFlag)
+						{
+							cFileTimeExt = cFileTimeExt_tmp;
+						}
+					}
+											
+                        dFindPos = cFileInPath.ReverseFind('\\');//yy add
+                        if(-1 == cFileNameOrig)
+						dFindPos = cFileInPath.ReverseFind('/');
+                        cFileNameOrig = cFileInPath.Right(cFileInPath.GetLength()-1-dFindPos);
+                        cFileNameOrig = cFileNameOrig.Left(cFileNameOrig.GetLength()-4);
+
+                        #if 0
+                                            //////LINSHIDAIMA
+                    	for(dCellIdx = 0; dCellIdx < MAX_CELL_NUM_ON_BOARD; dCellIdx++)
+                    	{
+                    		ptScheInfo = (T_Cmac2PulmDspCellDemInfo *)gatScheInfoDdrVC[dLoopCnt] + dCellIdx;
+                    		if((1 == ptScheInfo->tCellDemInfo.ucCellState)
+                    			|| (2 == ptScheInfo->tCellDemInfo.ucCellState))
+                            {
+
+                               
+                                cFileTemp.Format("SDMA_");
+                                cFileNameOrig=cFileTemp;
+
+                                switch(ptScheInfo->tCellDemInfo.ucUlBandwidth)
+                                {
+                                    case 100:
+                                          cFileTemp.Format("_20M");
+                                          break;
+                                    case 75:
+                                          cFileTemp.Format("_15M");
+                                          break;
+                                    case 50:
+                                          cFileTemp.Format("_10M");
+                                          break;
+                                    case 25:
+                                          cFileTemp.Format("_5M");
+                                          break;
+                                    case 15:
+                                          cFileTemp.Format("_3M");
+                                          break;
+                                    case 6:
+                                          cFileTemp.Format("_1.4M");
+                                          break;
+                                }
+                                   
+                                cFileNameOrig+=cFileTemp;
+                                
+                                if(0 == ptScheInfo->tCellDemInfo.ucDuplexType)
+                                {
+                                	if(3 == gatSimControl[0][ptScheInfo->tCellDemInfo.ucCellIdxInBoard].adCaseFlag[3])
+                                	{
+                             		 	if(0 == gatSimControl[0][ptScheInfo->tCellDemInfo.ucCellIdxInBoard].ucSrsFreqEsti)
+										{
+											cFileTemp.Format("_Freq_FDD_CellMode%d_%dSym_%dUE_%dRB_%dAnt_Sfn%d", ptScheInfo->tCellDemInfo.ucCellMode,ptScheInfo->atSrsCellScheInfo[0].ucSymNum,ptScheInfo->atSrsCellScheInfo[0].atSrsSymScheInfo[0].ucSrsFreUeNum + ptScheInfo->atSrsCellScheInfo[0].atSrsSymScheInfo[1].ucSrsFreUeNum,ptScheInfo->atSrsCellScheInfo[0].atSrsSymScheInfo[0].atUeScheInst[0].ucRbNum,ptScheInfo->tCellDemInfo.ucUlAntUsdNum,wSfnSubFrm);
+										}
+										else
+										{
+											cFileTemp.Format("_Time_FDD_CellMode%d_%dSym_%dUE_%dRB_%dAnt_Sfn%d", ptScheInfo->tCellDemInfo.ucCellMode,ptScheInfo->atSrsCellScheInfo[0].ucSymNum,ptScheInfo->atSrsCellScheInfo[0].atSrsSymScheInfo[0].ucSrsFreUeNum + ptScheInfo->atSrsCellScheInfo[0].atSrsSymScheInfo[1].ucSrsFreUeNum,ptScheInfo->atSrsCellScheInfo[0].atSrsSymScheInfo[0].atUeScheInst[0].ucRbNum,ptScheInfo->tCellDemInfo.ucUlAntUsdNum,wSfnSubFrm);
+										}
+									}
+									else
+									{
+                                 		    cFileTemp.Format("_FDD_%dCell_%dAnt_Mode%d_Sfn%d",adCellNum[dLoopCnt],ptScheInfo->tCellDemInfo.ucUlAntNum,ptScheInfo->tCellDemInfo.ucCellMode,ptScheInfo->tCellDemInfo.wSfnSubFrm);
+									 }
+								}
+                                else
+                                {
+									if(3 == gatSimControl[0][ptScheInfo->tCellDemInfo.ucCellIdxInBoard].adCaseFlag[3])
+									{
+										if(0 == gatSimControl[0][ptScheInfo->tCellDemInfo.ucCellIdxInBoard].ucSrsFreqEsti)
+										{
+											cFileTemp.Format("_Freq_TDD_CellMode%d_%dSym_%dUE_%dRB_%dAnt_Sfn%d", ptScheInfo->tCellDemInfo.ucCellMode,ptScheInfo->atSrsCellScheInfo[0].ucSymNum,ptScheInfo->atSrsCellScheInfo[0].atSrsSymScheInfo[0].ucSrsFreUeNum + ptScheInfo->atSrsCellScheInfo[0].atSrsSymScheInfo[1].ucSrsFreUeNum,ptScheInfo->atSrsCellScheInfo[0].atSrsSymScheInfo[0].atUeScheInst[0].ucRbNum,ptScheInfo->tCellDemInfo.ucUlAntUsdNum,wSfnSubFrm);
+										}
+										else
+										{
+											cFileTemp.Format("_Time_TDD_CellMode%d_%dSym_%dUE_%dRB_%dAnt_Sfn%d", ptScheInfo->tCellDemInfo.ucCellMode,ptScheInfo->atSrsCellScheInfo[0].ucSymNum,ptScheInfo->atSrsCellScheInfo[0].atSrsSymScheInfo[0].ucSrsFreUeNum + ptScheInfo->atSrsCellScheInfo[0].atSrsSymScheInfo[1].ucSrsFreUeNum,ptScheInfo->atSrsCellScheInfo[0].atSrsSymScheInfo[0].atUeScheInst[0].ucRbNum,ptScheInfo->tCellDemInfo.ucUlAntUsdNum,wSfnSubFrm);
+										}
+									}
+									else
+									{
+										cFileTemp.Format("_TDD_%dCell_%dAnt_Mode%d_Sfn%d",adCellNum[dLoopCnt],ptScheInfo->tCellDemInfo.ucUlAntNum,ptScheInfo->tCellDemInfo.ucCellMode,ptScheInfo->tCellDemInfo.wSfnSubFrm);
+									}
+											cFileNameOrig+=cFileTemp;
+
+												break;
+					}
+                    		    }
+                    		}
+							#endif
+										///////
+										WriteExcelMain(gatScheInfoDdrVC[dLoopCnt],gatCmac2PulmAntAdjustScheInfoVC[dLoopCnt],gatVCParaRecd[dLoopCnt],adCellNum[dLoopCnt],cFilePath_Out, &cFileTimeExt,&cFileNameOrig);
+    									strprint = "    xls文件生成完毕 \r\n";
+    									UpdateLog(&strprint);
+    								}
+				}
+				else
+				{
+					if((1 == m_GenExelFlg ) && (0 != adRachCellNum[dLoopCnt]))
+					{	
+						cFilePath_Out = m_FilePath_Out.Left(m_FilePath_Out.ReverseFind('\\'));
+					    RachWriteExcelMain(gatLramInCellParaBuffer[dLoopCnt],gatLramParamInfoFT[dLoopCnt],gatScheInfoDdrVC[dLoopCnt],adRachCellNum[dLoopCnt],wSfnSubFrm,cFilePath_Out,cFileTimeExt);
+						strprint = "   xls文件生成完毕 \r\n";
+						UpdateLog(&strprint);
+					}
+					if((1 == m_GendatFlg) && (0 != adRachCellNum[dLoopCnt]))
+					{
+						cFilePath_Out = m_FilePath_Out.Left(m_FilePath_Out.ReverseFind('\\'));
+						WriteSchInfoMain(&gatScheInfoDdrVC[dLoopCnt][0],&gatScheInfoDdrDSP[dLoopCnt][0],cFilePath_Out, &cFileTimeExt,m_manuconfig.m_prachtestflg);
+						RachWriteSchInfoMain(&gatLramInCellParaBuffer[dLoopCnt][0],dLoopCnt, &gatLramParamInfoFT[dLoopCnt][0], cFilePath_Out,1,wSfnSubFrm,&cFileTimeExt);	
+						memset(&gatPulm2UlCmacSim.atPulm2MulsdCellMsg1Info[0][0],0, sizeof(T_Pulm2MulsdCellMsg1Info)*10*6);
+						memset(&gaxwLramDdcDataA[0][0][0][0][0],0, sizeof(CMPL16)*3*2*2*8*1536);
+						memset(&gaxwLramDdcDataB[0][0][0][0][0],0, sizeof(CMPL16)*3*2*2*8*1536);
+						RachDataReduction(&cFilePath_Out,&cFileTimeExt,wSfnSubFrm,&gatLramInCellParaBuffer[dLoopCnt][0],&gatLramParamInfoFT[dLoopCnt][0],dLoopCnt);
+						strprint = "    解调消息、核分工生成完毕 \r\n";
+						UpdateLog(&strprint);					
+					}	
+				}
+				if(4 == gatVCParaRecd[dLoopCnt][0].dACCaseFlag)
+				{
+					if(1 == gatCmac2PulmAntAdjustScheInfoVC[dLoopCnt][0].ucActive)
+						bAcFlag = 1;
+					else
+						bAcFlag = 3;
+				}
+				dLoopCnt++;
+				if(100 == dLoopCnt)
+				{
+					memset(adCellNum,0,sizeof(adCellNum));
+					memset(adRachCellNum,0,sizeof(adRachCellNum));
+				}
+				dLoopCnt = dLoopCnt % 100;
+				dCaseCnt++;
+				dDataReady = 1;
+				//LOG打印
+				dFindPos = cFileInPath.ReverseFind('\\');
+				cFileRootPath = cFileInPath.Left(dFindPos);
+				str = cFileRootPath + "\\LogGen.txt";
+				strprint = strprint1+strprint2;
+				fp = fopen(str,"a");
+				if(fp!=NULL)
+				{
+					fprintf(fp,"%s,第%d个用例\n",strprint,dCaseCnt);
+					fclose(fp);
+				}
+				//strprint = strprint + "  wSfnSubFrm  " + str  +  "\r\n\r\n";
+				//UpdateLog(&strprint);
+			}
+			//strprint = "数据读取完成\r\n\r\n";
+			//UpdateLog(&strprint); 
+			strprint.Format("   恢复用例总数:%d",dCaseCnt);
+						UpdateLog(&strprint);
+			//LOG打印
+			str = cFileRootPath + "\\LogGen.txt";
+			fp = fopen(str,"a");
+			if(fp!=NULL)
+			{
+				fprintf(fp,"%s\n",strprint);
+				fclose(fp);
+			}
+			gdmanuconfigFlg = 0;
+
+			if((1 == m_GendatFlg)&&(1 == m_GenConfigFlg))
+			{
+				dRecoverCase0Flg = 1;
+			
+				if(4 == gatVCParaRecd[dLoopCnt-1][0].dACCaseFlag)
+				{
+					m_FilePath_Out = cFilePath_Out+"\\ScheInfo";
+				}
+			
+
+				goto Label1;
+
+			}
+			else
+			{
+				dRecoverCase0Flg = 0;
+			}
+			
+
+		break;
+		}
+	case 1:
+		{			
+			UCHAR ucAntNumRand;
+			CDatabase cPICTdb;
+			CRecordset cPICTrecord(&cPICTdb);
+			CString csPCITFilePath;
+			CString csSheetName;
+			CString csValueTmp;
+			WORD32 dRecordNum = 0;
+			CString sSql;
+			WORD32 dCaseNum;
+			strprint = "开始生成数据\r\n\r\n";
+			UpdateLog(&strprint);
+			gdRandInit = (unsigned int)GetCurrentTime();
+			srand(gdRandInit); 
+			m_manuconfig.UpdateData(TRUE);
+			gucRailairFlg = m_manuconfig.m_railairflg;
+			csPCITFilePath = m_manuconfig.m_nFilePICT;
+			CString sTmp = csPCITFilePath.Right(csPCITFilePath.GetLength()-csPCITFilePath.ReverseFind('\\')-1);
+			gucPICTFlg = 0;
+			if("PICT_" == sTmp.Left(5))
+			{
+				gucPICTFlg = 1;
+				memset(gadPICTValue,-1,sizeof(gadPICTValue));
+				CString sDriver = GetExcelDriver();
+				if (sDriver.IsEmpty())
+				{
+					// 没有发现Excel驱动
+					AfxMessageBox("没有安装Excel驱动!");
+					return ;
+				}
+				CString sDsn;
+				sDsn.Format("ODBC;DRIVER={%s};DSN='''';DBQ=%s", sDriver, csPCITFilePath);
+				csSheetName = sTmp.Left(sTmp.ReverseFind('.'));
+				try
+				{
+					cPICTdb.Open(NULL, false, false, sDsn);
+					sSql = "SELECT ";
+					for(int i = 0; i < PICT_ITEM_NUM-1; i++)
+					{
+						sSql += gasPICTItem[i] + ",";
+					}
+					CString csTmpSheet;
+					csTmpSheet.Format(" FROM [%s$]",csSheetName);
+					sSql += gasPICTItem[PICT_ITEM_NUM-1] + csTmpSheet;
+					int dret = cPICTrecord.Open(CRecordset::forwardOnly, sSql, CRecordset::readOnly);
+					if(0 == dret)
+					{
+						AfxMessageBox("PICT读取错误");
+						return;
+					}	
+			//		dRecordNum = cPICTrecord.GetRecordCount();
+					dRecordNum = 0;
+					while(0 == cPICTrecord.IsEOF())
+					{
+						for(int j = 0; j < PICT_ITEM_NUM; j++)
+						{							
+							cPICTrecord.GetFieldValue(gasPICTItem[j], csValueTmp);	
+							gadPICTValue[dRecordNum][j] = atoi(csValueTmp);
+						}
+						if(PICT_MAX_CASE_NUM < dRecordNum)
+						{
+							AfxMessageBox("PICT用例数过多，请修改宏或删减用例");
+							return;
+						}
+						cPICTrecord.MoveNext(); 
+						dRecordNum++;
+					}						
+					cPICTrecord.Close();				
+					cPICTdb.Close();
+				}
+				catch(CException* e)
+				{
+					cPICTdb.Close();
+					// 数据库操作产生异常时...
+				}
+			}
+			if((1 == m_manuconfig.m_actestflg) && (2 == m_manuconfig.m_uldlconfig) )
+     		  	{
+				m_manuconfig.m_casenum = 2 * m_manuconfig.m_casenum;
+				bAcFlag = 1;
+     			}
+			else if((1 == m_manuconfig.m_actestflg) && (2 != m_manuconfig.m_uldlconfig) )
+			{
+				m_manuconfig.m_casenum = 3 * m_manuconfig.m_casenum;
+				bAcFlag = 1;
+			}
+			dLoopCnt = m_manuconfig.m_casenum;
+
+			ucUlDlConfig = m_manuconfig.m_uldlconfig;
+			if(8 == ucUlDlConfig)
+				ucDuplexType = 0;
+			else
+				ucDuplexType = 1;
+			dFrmNo = rand()%1024;
+			dSubFrmNo = 0;
+			if(1 == gucPICTFlg)
+			{
+				if(0 == m_manuconfig.m_cellnum)
+					return;
+				dCaseNum = m_manuconfig.m_casenum * dRecordNum;	
+			}
+			else
+			{
+				dCaseNum = m_manuconfig.m_casenum;
+			}
+			for(dLoopCnt=0; dLoopCnt < dCaseNum; dLoopCnt++)
+			{
+				if((1 == m_manuconfig.m_prachtestflg) && (8 == ucUlDlConfig) && (0 == m_manuconfig.m_cellmode))
+				{
+					for(dCellIdx = 0; dCellIdx < m_manuconfig.m_cellnum; dCellIdx++)
+					{
+						gaucRruVga[dCellIdx][0] = 0 ;
+						gaucRruVga[dCellIdx][1] = 0 ;
+						gaucRruVga[dCellIdx][2] = 0 ;
+						gaucRruVga[dCellIdx][3] = 0 ;
+						gaucRruVga[dCellIdx][4] = 0 ;
+						gaucRruVga[dCellIdx][5] = 0 ;
+						gaucRruVga[dCellIdx][6] = 0 ;
+						gaucRruVga[dCellIdx][7] = 0 ;
+					}
+				}
+				else
+				{
+				for(dCellIdx = 0; dCellIdx < m_manuconfig.m_cellnum; dCellIdx++)
+				{
+					gaucRruVga[dCellIdx][0] = (rand()%60) + 40 ;
+					gaucRruVga[dCellIdx][1] = (rand()%60) + 40 ;
+					gaucRruVga[dCellIdx][2] = (rand()%60) + 40 ;
+					gaucRruVga[dCellIdx][3] = (rand()%60) + 40 ;
+					gaucRruVga[dCellIdx][4] = (rand()%60) + 40 ;
+					gaucRruVga[dCellIdx][5] = (rand()%60) + 40 ;
+					gaucRruVga[dCellIdx][6] = (rand()%60) + 40 ;
+					gaucRruVga[dCellIdx][7] = (rand()%60) + 40 ;
+					}
+				}
+				if(100 <= dLoopCnt)
+				{
+					memset(adCellNum,0,sizeof(adCellNum));
+					memset(adRachCellNum,0,sizeof(adRachCellNum));
+				}
+				dCaseIdx = dLoopCnt % 100;
+				if(8 != ucUlDlConfig)  //TDD
+				{
+			     		if(1 == m_manuconfig.m_actestflg)
+					{
+						ucUpSfnFlg = AC_TAB_UPDOWN_CONFIG_UCHAR[ucUlDlConfig][dSubFrmNo];
+					}
+					else if(1 == m_manuconfig.m_gpuptestflg)
+					{
+						ucUpSfnFlg = GPUP_TAB_UPDOWN_CONFIG_UCHAR[ucUlDlConfig][dSubFrmNo];
+					}
+					else if(1 == m_manuconfig.m_srstestflg || 1 == m_manuconfig.m_SpeUlEnable)
+					{
+						ucUpSfnFlg = TAB_UPDOWN_CONFIG_UCHAR[ucUlDlConfig][dSubFrmNo] | GPUP_TAB_UPDOWN_CONFIG_UCHAR[ucUlDlConfig][dSubFrmNo];
+					}
+					else
+					{
+						ucUpSfnFlg = TAB_UPDOWN_CONFIG_UCHAR[ucUlDlConfig][dSubFrmNo];
+					}
+					while(0 == ucUpSfnFlg)
+					{
+						dSubFrmNo += 1;
+						if(10 == dSubFrmNo)
+						{
+							dSubFrmNo = 0;
+							dFrmNo = (dFrmNo + 1)%1024;	
+						}
+						if(1 == m_manuconfig.m_actestflg)
+						{
+							ucUpSfnFlg = AC_TAB_UPDOWN_CONFIG_UCHAR[ucUlDlConfig][dSubFrmNo];
+						}
+						else if(1 == m_manuconfig.m_srstestflg || 1 == m_manuconfig.m_SpeUlEnable)
+						{
+							ucUpSfnFlg = TAB_UPDOWN_CONFIG_UCHAR[ucUlDlConfig][dSubFrmNo] | GPUP_TAB_UPDOWN_CONFIG_UCHAR[ucUlDlConfig][dSubFrmNo];
+						}
+						else 
+						{
+							ucUpSfnFlg = TAB_UPDOWN_CONFIG_UCHAR[ucUlDlConfig][dSubFrmNo]; 
+						}
+					}
+				}
+				wSfnSubFrm = (dFrmNo<<4) | dSubFrmNo;
+					
+				dSubFrmNo = (dSubFrmNo + 1) % 10;
+				if(0 == dSubFrmNo)
+					dFrmNo = (dFrmNo + 1)%1024;
+				
+				memset(&gatScheInfoDdrVC[dCaseIdx][0],0,sizeof(T_Cmac2PulmDspCellDemInfo)*MAX_CELL_NUM_ON_BOARD);
+				memset(&gatVCParaRecd[dCaseIdx][0],0,sizeof(T_FTCasePara)*MAX_CELL_NUM_ON_BOARD);
+				memset(&gtScheVCdat,0,sizeof(T_ATPPara));
+              	memset(&gatScheInfoDdrDSP[dCaseIdx][0],0,sizeof(T_Cmac2PulmDspCellDemInfo)*MAX_CELL_NUM_ON_BOARD);//yy
+              	if(1 == m_manuconfig.m_BWRand)
+              	{
+              		gatScheInfoDdrVC[dCaseIdx][0].tCellDemInfo.ucUlBandwidth = 25*(rand()%4 + 1);
+					gatScheInfoDdrVC[dCaseIdx][1].tCellDemInfo.ucUlBandwidth = 25*(rand()%4 + 1);
+					gatScheInfoDdrVC[dCaseIdx][2].tCellDemInfo.ucUlBandwidth = 25*(rand()%4 + 1);
+					gatScheInfoDdrVC[dCaseIdx][3].tCellDemInfo.ucUlBandwidth = 25*(rand()%4 + 1);
+					gatScheInfoDdrVC[dCaseIdx][4].tCellDemInfo.ucUlBandwidth = 25*(rand()%4 + 1);
+					gatScheInfoDdrVC[dCaseIdx][5].tCellDemInfo.ucUlBandwidth = 25*(rand()%4 + 1);
+					if(1 == m_manuconfig.m_supercellflg)
+					{
+						gatScheInfoDdrVC[dCaseIdx][1].tCellDemInfo.ucUlBandwidth = gatScheInfoDdrVC[dCaseIdx][0].tCellDemInfo.ucUlBandwidth;
+						gatScheInfoDdrVC[dCaseIdx][2].tCellDemInfo.ucUlBandwidth = gatScheInfoDdrVC[dCaseIdx][0].tCellDemInfo.ucUlBandwidth;
+						gatScheInfoDdrVC[dCaseIdx][3].tCellDemInfo.ucUlBandwidth = gatScheInfoDdrVC[dCaseIdx][0].tCellDemInfo.ucUlBandwidth;
+						gatScheInfoDdrVC[dCaseIdx][4].tCellDemInfo.ucUlBandwidth = gatScheInfoDdrVC[dCaseIdx][0].tCellDemInfo.ucUlBandwidth;
+						gatScheInfoDdrVC[dCaseIdx][5].tCellDemInfo.ucUlBandwidth = gatScheInfoDdrVC[dCaseIdx][0].tCellDemInfo.ucUlBandwidth;
+					}
+              	}
+				else
+				{
+					gatScheInfoDdrVC[dCaseIdx][0].tCellDemInfo.ucUlBandwidth = m_manuconfig.m_bw0;
+					gatScheInfoDdrVC[dCaseIdx][1].tCellDemInfo.ucUlBandwidth = m_manuconfig.m_bw1;
+					gatScheInfoDdrVC[dCaseIdx][2].tCellDemInfo.ucUlBandwidth = m_manuconfig.m_bw2;
+					gatScheInfoDdrVC[dCaseIdx][3].tCellDemInfo.ucUlBandwidth = m_manuconfig.m_bw3;
+					gatScheInfoDdrVC[dCaseIdx][4].tCellDemInfo.ucUlBandwidth = m_manuconfig.m_bw4;
+					gatScheInfoDdrVC[dCaseIdx][5].tCellDemInfo.ucUlBandwidth = m_manuconfig.m_bw5;
+				}
+				if(0 == m_manuconfig.m_cellmode)
+				{
+					ucAntNumRand = 4;
+				}
+				else
+				{
+					ucAntNumRand = 3;
+				}
+				if(1 == m_manuconfig.m_AntRand)
+				{
+					gatScheInfoDdrVC[dCaseIdx][0].tCellDemInfo.ucUlAntNum = (1<<rand()%ucAntNumRand);
+					gatScheInfoDdrVC[dCaseIdx][1].tCellDemInfo.ucUlAntNum = (1<<rand()%ucAntNumRand);
+					gatScheInfoDdrVC[dCaseIdx][2].tCellDemInfo.ucUlAntNum = (1<<rand()%ucAntNumRand);
+					gatScheInfoDdrVC[dCaseIdx][3].tCellDemInfo.ucUlAntNum = (1<<rand()%ucAntNumRand);
+					gatScheInfoDdrVC[dCaseIdx][4].tCellDemInfo.ucUlAntNum = (1<<rand()%ucAntNumRand);
+					gatScheInfoDdrVC[dCaseIdx][5].tCellDemInfo.ucUlAntNum = (1<<rand()%ucAntNumRand);
+				}
+				else
+				{
+					gatScheInfoDdrVC[dCaseIdx][0].tCellDemInfo.ucUlAntNum = m_manuconfig.m_antnumcell0;
+					gatScheInfoDdrVC[dCaseIdx][1].tCellDemInfo.ucUlAntNum = m_manuconfig.m_antnumcell1;
+					gatScheInfoDdrVC[dCaseIdx][2].tCellDemInfo.ucUlAntNum = m_manuconfig.m_antnumcell2;
+					gatScheInfoDdrVC[dCaseIdx][3].tCellDemInfo.ucUlAntNum = m_manuconfig.m_antnumcell3;
+					gatScheInfoDdrVC[dCaseIdx][4].tCellDemInfo.ucUlAntNum = m_manuconfig.m_antnumcell4;
+					gatScheInfoDdrVC[dCaseIdx][5].tCellDemInfo.ucUlAntNum = m_manuconfig.m_antnumcell5;
+				}
+				gatScheInfoDdrVC[dCaseIdx][0].tCellDemInfo.ucUlDlConfig = ucUlDlConfig;
+				gatScheInfoDdrVC[dCaseIdx][1].tCellDemInfo.ucUlDlConfig = ucUlDlConfig;
+				gatScheInfoDdrVC[dCaseIdx][2].tCellDemInfo.ucUlDlConfig = ucUlDlConfig;
+				gatScheInfoDdrVC[dCaseIdx][3].tCellDemInfo.ucUlDlConfig = ucUlDlConfig;
+				gatScheInfoDdrVC[dCaseIdx][4].tCellDemInfo.ucUlDlConfig = ucUlDlConfig;
+				gatScheInfoDdrVC[dCaseIdx][5].tCellDemInfo.ucUlDlConfig = ucUlDlConfig;
+				if(0 == m_manuconfig.m_cellmode)
+				{
+					gatScheInfoDdrVC[dCaseIdx][0].tCellDemInfo.ucULIQLink = 4;  //0100
+					gatScheInfoDdrVC[dCaseIdx][1].tCellDemInfo.ucULIQLink = 4;   //0100
+					gatScheInfoDdrVC[dCaseIdx][2].tCellDemInfo.ucULIQLink = 14;  //1110
+				}
+				else
+				{
+					gatScheInfoDdrVC[dCaseIdx][0].tCellDemInfo.ucULIQLink = 0;  
+					gatScheInfoDdrVC[dCaseIdx][1].tCellDemInfo.ucULIQLink = 0;   
+					gatScheInfoDdrVC[dCaseIdx][2].tCellDemInfo.ucULIQLink = 1; 
+					gatScheInfoDdrVC[dCaseIdx][3].tCellDemInfo.ucULIQLink = 1;  
+					gatScheInfoDdrVC[dCaseIdx][4].tCellDemInfo.ucULIQLink = 2;   
+					gatScheInfoDdrVC[dCaseIdx][5].tCellDemInfo.ucULIQLink = 2; 
+				}
+				if(1 == gucPICTFlg)
+				{
+					for(dCellIdx = 0; dCellIdx < 6; dCellIdx++)
+					{
+						if(1 == m_manuconfig.m_supercellflg)
+						{
+							if(-1 != gadPICTValue[dLoopCnt%dRecordNum][dCellIdx])
+							{
+								gatScheInfoDdrVC[dCaseIdx][dCellIdx].tCellDemInfo.ucUlAntNum = gadPICTValue[dLoopCnt%dRecordNum][dCellIdx];							
+							}	
+							if(-1 != gadPICTValue[dLoopCnt%dRecordNum][6])
+							{
+								gatScheInfoDdrVC[dCaseIdx][dCellIdx].tCellDemInfo.ucUlBandwidth = gadPICTValue[dLoopCnt%dRecordNum][6]*5;
+							}
+						}
+						else
+						{
+							if(-1 != gadPICTValue[dLoopCnt%dRecordNum][dCellIdx])
+							{
+								gatScheInfoDdrVC[dCaseIdx][dCellIdx].tCellDemInfo.ucUlAntNum = gadPICTValue[dLoopCnt%dRecordNum][dCellIdx];							
+							}	
+							if(-1 != gadPICTValue[dLoopCnt%dRecordNum][dCellIdx+6])
+							{
+								gatScheInfoDdrVC[dCaseIdx][dCellIdx].tCellDemInfo.ucUlBandwidth = gadPICTValue[dLoopCnt%dRecordNum][dCellIdx+6]*5;
+							}
+						}
+					}
+				}
+                gdRandseed = rand();
+				gdSpecialSubfrmConfig = rand()%10;
+				
+				if(1 == m_manuconfig.m_srstestflg)
+				{
+					gucChannelType = 1;
+				}
+				else
+				{
+                   gucChannelType = rand()%7+1; /* 7种信道类型	"ChannelType", 1 - AWNG,2 - EPA5,3 - EVA5,4 - EVA70,5 - EVA300,6 - ETU70,7 - ETU300  */
+				}
+				if(0 == m_manuconfig.m_supercellflg)
+				{
+					if(0 == m_manuconfig.m_compflg)
+					{
+						dMimoFlg = rand()%2;
+						dMimoFlg = 0;  
+					}
+					else
+					{
+						dMimoFlg = 0;
+                        gucCloudIrc=0;  //yy cloud
+					}
+					if(1 == dMimoFlg)
+					{
+						if(1 == m_manuconfig.m_AntRand)
+						{
+							if(0 == m_manuconfig.m_cellmode)
+							{
+								ucAntNumRand = 3;
+							}
+							else
+							{
+								ucAntNumRand = 2;
+							}
+							gatScheInfoDdrVC[dCaseIdx][0].tCellDemInfo.ucUlAntNum = (1<<(rand()%ucAntNumRand+1));//MIMo 不能配1ANT
+							gatScheInfoDdrVC[dCaseIdx][1].tCellDemInfo.ucUlAntNum = (1<<(rand()%ucAntNumRand+1));
+							gatScheInfoDdrVC[dCaseIdx][2].tCellDemInfo.ucUlAntNum = (1<<(rand()%ucAntNumRand+1));
+							gatScheInfoDdrVC[dCaseIdx][3].tCellDemInfo.ucUlAntNum = (1<<(rand()%ucAntNumRand+1));
+							gatScheInfoDdrVC[dCaseIdx][4].tCellDemInfo.ucUlAntNum = (1<<(rand()%ucAntNumRand+1));
+							gatScheInfoDdrVC[dCaseIdx][5].tCellDemInfo.ucUlAntNum = (1<<(rand()%ucAntNumRand+1));
+						}
+					}
+				if(1 == m_manuconfig.m_prachtestflg)
+					{
+						 memset(&gatLramInCellParaBuffer[dCaseIdx][0],0,sizeof(T_Cmac2PulmPrachDemInfo)*MAX_CELL_NUM_ON_BOARD);
+						  memset(&gatLramParamInfoFT[dCaseIdx][0],0,sizeof(T_PrachParamInfoTest)*MAX_CELL_NUM_ON_BOARD);
+						  memset(&gatParamMsgInfoA[dCaseIdx],0,sizeof(T_PrachParamMsgInfo)*10*MAX_CELL_NUM_ON_BOARD);	
+					      	memset(&gatParamMsgInfoB[dCaseIdx],0,sizeof(T_PrachParamMsgInfo)*10*MAX_CELL_NUM_ON_BOARD);	
+					}
+					for(dCellIdx = 0; dCellIdx < m_manuconfig.m_cellnum; dCellIdx++)
+					{
+						ptScheInfo = &gatScheInfoDdrVC[dCaseIdx][dCellIdx];
+						ptScheInfo->tCellDemInfo.ucDuplexType = ucDuplexType;
+						ptScheInfo->tCellDemInfo.wSfnSubFrm = wSfnSubFrm;
+						ptScheInfo->tCellDemInfo.ucCellMode = m_manuconfig.m_cellmode;
+						ptScheInfo->tCellDemInfo.ucCellIdxInBoard = dCellIdx;
+#if (PHY_VERSION_FLG == TRUNK2) || (PHY_VERSION_FLG == TRUNK3)
+						if((1 == m_manuconfig.m_dsqflg)&&(1 == ptScheInfo->tCellDemInfo.ucDuplexType)&&(2 ==ucUlDlConfig))
+						{
+							ptScheInfo->tCellDemInfo.ucDynamicSequenceSwitch = 1;
+						}
+						else
+						{
+							ptScheInfo->tCellDemInfo.ucDynamicSequenceSwitch = 0;
+						}
+#endif
+						
+                        #if (PHY_VERSION_FLG == TRUNK3)
+                              ptScheInfo->tCellDemInfo.ucSelectiveMergeSwitch= 0;//先打桩打开，混配情况也需要打开
+                            
+                        #endif						
+						if(1 == m_manuconfig.m_prachtestflg)
+						{
+							gatLramInCellParaBuffer[dCaseIdx][dCellIdx].ucTDDFDDFlag = ucDuplexType;
+				#if(0 == RachLotTest)
+						gatLramInCellParaBuffer[dCaseIdx][dCellIdx].ucBandWidth  = m_manuconfig.m_bw0;
+						gatLramInCellParaBuffer[dCaseIdx][dCellIdx].ucCellAntNum = m_manuconfig.m_antnumcell0; 
+						gatLramInCellParaBuffer[dCaseIdx][dCellIdx].ucUldlCfgIdx = ucUlDlConfig;
+				#else
+						if(0 == gucHighSpdFlag)
+						{
+							gatLramInCellParaBuffer[dCaseIdx][dCellIdx].ucBandWidth  = m_manuconfig.m_bw0;
+							gatLramInCellParaBuffer[dCaseIdx][dCellIdx].ucCellAntNum = m_manuconfig.m_antnumcell0;  
+						}
+						else
+						{
+							gatLramInCellParaBuffer[dCaseIdx][dCellIdx].ucBandWidth  = gucBandWidth[dLoopCnt/216];
+					       	gatLramInCellParaBuffer[dCaseIdx][dCellIdx].ucCellAntNum = gucAntNum[(dLoopCnt%216)/72];
+						}
+						if(8 == ucUlDlConfig)
+						{
+							gatLramInCellParaBuffer[dCaseIdx][dCellIdx].ucUldlCfgIdx = ucUlDlConfig;
+						}
+						else
+						{
+							gatLramInCellParaBuffer[dCaseIdx][dCellIdx].ucUldlCfgIdx = gaucMCellUlCfgIdx[dLoopCnt];//gaucUlCfgIdx[dLoopCnt];
+						}
+						
+				#endif								
+							gatLramInCellParaBuffer[dCaseIdx][dCellIdx].ucCellEn     = m_manuconfig.m_cellmode;
+							if(0 == m_manuconfig.m_cellmode)
+							{
+							if(8 == gatLramInCellParaBuffer[dCaseIdx][dCellIdx].ucCellAntNum)  
+								{
+									gatLramInCellParaBuffer[dCaseIdx][dCellIdx].ucActAntNum = 4;  
+								}
+								else
+								{
+									gatLramInCellParaBuffer[dCaseIdx][dCellIdx].ucActAntNum = gatLramInCellParaBuffer[dCaseIdx][dCellIdx].ucCellAntNum;
+								}	
+							}
+							else
+							{
+							if(4 == gatLramInCellParaBuffer[dCaseIdx][dCellIdx].ucCellAntNum)
+								{
+									gatLramInCellParaBuffer[dCaseIdx][dCellIdx].ucActAntNum =  2;
+								}
+								else
+								{
+									gatLramInCellParaBuffer[dCaseIdx][dCellIdx].ucActAntNum = gatLramInCellParaBuffer[dCaseIdx][dCellIdx].ucCellAntNum;
+								}
+							}
+							gatLramParamInfoFT[dCaseIdx][dCellIdx].wSfnSubFrm = wSfnSubFrm;
+							for(ucAntIdx = 0;ucAntIdx < 8;ucAntIdx++)
+							{
+								gatLramParamInfoFT[dCaseIdx][dCellIdx].awRruVga[ucAntIdx] = gaucRruVga[dCellIdx][ucAntIdx];
+							}
+							GenRachScheInfo(&gatLramInCellParaBuffer[dCaseIdx][dCellIdx],&gatLramParamInfoFT[dCaseIdx][dCellIdx],dCellIdx, dLoopCnt);
+
+							memset(ptScheInfo,0,sizeof(T_Cmac2PulmDspCellDemInfo));
+							ptScheInfo->tCellDemInfo.wSfnSubFrm = gatLramParamInfoFT[dCaseIdx][dCellIdx].wSfnSubFrm;                                
+							ptScheInfo->tCellDemInfo.wL3CellId = gatLramInCellParaBuffer[dCaseIdx][dCellIdx].wL3CellId;                             
+							ptScheInfo->tCellDemInfo.wCellId = ptScheInfo->tCellDemInfo.wL3CellId;                         
+							ptScheInfo->tCellDemInfo.wRFID = ptScheInfo->tCellDemInfo.wL3CellId;                           
+							ptScheInfo->tCellDemInfo.ucCellState = 1;                                                      
+							ptScheInfo->tCellDemInfo.ucCellMode = (gatLramInCellParaBuffer[dCaseIdx][dCellIdx].ucCellEn>>1);                        
+							ptScheInfo->tCellDemInfo.ucCellIdxInBoard = gatLramInCellParaBuffer[dCaseIdx][dCellIdx].ucCellIdx;                      
+							ptScheInfo->tCellDemInfo.ucUlBandwidth = gatLramInCellParaBuffer[dCaseIdx][dCellIdx].ucBandWidth;                       
+							ptScheInfo->tCellDemInfo.swRruBasePwr = gatLramInCellParaBuffer[dCaseIdx][dCellIdx].swRruBasePwr;                       
+							ptScheInfo->tCellDemInfo.swRruRfPwr = gatLramInCellParaBuffer[dCaseIdx][dCellIdx].swRruRfPwr;                           
+							ptScheInfo->tCellDemInfo.ucUlAntNum = gatLramInCellParaBuffer[dCaseIdx][dCellIdx].ucCellAntNum;                         
+							ptScheInfo->tCellDemInfo.ucUlAntUsdNum =  gatLramInCellParaBuffer[dCaseIdx][dCellIdx].ucActAntNum;                      
+							for(ucAntIdx = 0; ucAntIdx < 8; ucAntIdx++)                                                       
+							{                                                                                              
+								ptScheInfo->tCellDemInfo.aucUlAntUsdIdx[ucAntIdx] = gatLramInCellParaBuffer[dCaseIdx][dCellIdx].aucActAntIdx[ucAntIdx]; 
+							}                                                                                              
+							ptScheInfo->tCellDemInfo.ucDuplexType = gatLramInCellParaBuffer[dCaseIdx][dCellIdx].ucTDDFDDFlag;                       
+							ptScheInfo->tCellDemInfo.ucUlDlConfig = gatLramInCellParaBuffer[dCaseIdx][dCellIdx].ucUldlCfgIdx;                       
+							ptScheInfo->tCellDemInfo.ucSpecialSubfrmConfig = gatLramParamInfoFT[dCaseIdx][dCellIdx].ucSpecialSubfrmConfig;				   
+							wSfnSubFrm = gatLramParamInfoFT[dCaseIdx][dCellIdx].wSfnSubFrm;   
+							adRachCellNum[dCaseIdx] ++;
+						}
+                        else
+                        {
+                            //ac
+    						if((1 == m_manuconfig.m_actestflg) && (2 == m_manuconfig.m_uldlconfig))
+    						{
+    						   if(0 == (dCaseIdx%2))
+    							{
+    								GenScheInfo(ptScheInfo,&gatVCParaRecd[dCaseIdx][dCellIdx],dMimoFlg);
+    								GenScheInfoAC(ptScheInfo,&gatCmac2PulmAntAdjustScheInfoVC[dCaseIdx][dCellIdx],&gatVCParaRecd[dCaseIdx][dCellIdx]);
+    		   				    }
+    						    else
+    						    {
+    							    memcpy(&gatScheInfoDdrVC[dCaseIdx][dCellIdx], &gatScheInfoDdrVC[dCaseIdx - 1][dCellIdx],sizeof(T_Cmac2PulmDspCellDemInfo));
+    							    memcpy(&gatCmac2PulmAntAdjustScheInfoVC[dCaseIdx][dCellIdx], &gatCmac2PulmAntAdjustScheInfoVC[dCaseIdx-1][dCellIdx],sizeof(T_Cmac2PulmAntAdjustScheInfo));
+    							    memcpy(&gatVCParaRecd[dCaseIdx][dCellIdx], &gatVCParaRecd[dCaseIdx-1][dCellIdx],sizeof(T_FTCasePara));		   
+    								ptScheInfo->tCellDemInfo.wSfnSubFrm = wSfnSubFrm; 
+    								ptScheInfo->tCellSymInfo.wSfnSubFrm = wSfnSubFrm;
+    								gatCmac2PulmAntAdjustScheInfoVC[dCaseIdx][dCellIdx].ucActive = 1;
+    						    }
+    						}
+    						else if((1 == m_manuconfig.m_actestflg) && (2 != m_manuconfig.m_uldlconfig))
+    						{//ac
+    							if(0 == (dCaseIdx%3))
+    							{
+    							       GenScheInfo(ptScheInfo,&gatVCParaRecd[dCaseIdx][dCellIdx],dMimoFlg);
+    								GenScheInfoAC(ptScheInfo,&gatCmac2PulmAntAdjustScheInfoVC[dCaseIdx][dCellIdx],&gatVCParaRecd[dCaseIdx][dCellIdx]);
+    							}
+    							else
+    							 {
+    							 	 memcpy(&gatScheInfoDdrVC[dCaseIdx][dCellIdx], &gatScheInfoDdrVC[dCaseIdx - 1][dCellIdx],sizeof(T_Cmac2PulmDspCellDemInfo));
+    							       memcpy(&gatCmac2PulmAntAdjustScheInfoVC[dCaseIdx][dCellIdx], &gatCmac2PulmAntAdjustScheInfoVC[dCaseIdx-1][dCellIdx],sizeof(T_Cmac2PulmAntAdjustScheInfo));
+    								 memcpy(&gatVCParaRecd[dCaseIdx][dCellIdx], &gatVCParaRecd[dCaseIdx-1][dCellIdx],sizeof(T_FTCasePara));		   
+    								ptScheInfo->tCellDemInfo.wSfnSubFrm = wSfnSubFrm; 
+    								ptScheInfo->tCellSymInfo.wSfnSubFrm = wSfnSubFrm;
+    								if(2 == (dCaseIdx%3))
+    								{
+    								gatCmac2PulmAntAdjustScheInfoVC[dCaseIdx][dCellIdx].ucActive = 1;
+    								}
+    							}
+    				     
+    						}
+    						else
+    						{//normal
+							if(1 == m_manuconfig.m_srstestflg)
+    						{
+								gdCellSrsFlag = 1;
+								gdSrsFreqEsti = rand()%2;
+							}
+								memset(&ptScheInfo->tCellDemInfo.atCoOperCellInfo[0],0xFF,sizeof(T_CoOperCellInfo)*MAX_COOPRATE_CELL_NUM);
+    						    GenScheInfo(ptScheInfo,&gatVCParaRecd[dCaseIdx][dCellIdx],dMimoFlg);
+    							if(1 == m_manuconfig.m_srstestflg)
+    							{
+    								gatVCParaRecd[dCaseIdx][dCellIdx].dSRSCaseFlag = gdCellSrsFlag;
+									gatVCParaRecd[dCaseIdx][dCellIdx].dSrsFreqEsti = gdSrsFreqEsti;    								
+									GenSrsScheInfo(ptScheInfo,&gatVCParaRecd[dCaseIdx][dCellIdx],dCaseIdx);								
+    							}
+    						}
+                            
+                        }
+						adCellNum[dCaseIdx] ++;
+					}
+				        
+			            tPucchCasePara.ucNumCell = 0;  
+						tPucchCasePara.aucCellIdxInBoard[0] = 0;
+						tPucchCasePara.awCellID[0] = gatScheInfoDdrVC[dCaseIdx][tPucchCasePara.aucCellIdxInBoard[0]].tCellDemInfo.wCellId ;
+						tPucchCasePara.aucbandWidth_ind[0] = gatScheInfoDdrVC[dCaseIdx][tPucchCasePara.aucCellIdxInBoard[0]].tCellDemInfo.ucUlBandwidth;
+                    	tPucchCasePara.ucAntNum[0] = gatScheInfoDdrVC[dCaseIdx][tPucchCasePara.aucCellIdxInBoard[0]].tCellDemInfo.ucUlAntNum;
+						tPucchCasePara.ucUpDownConfig  = ucUlDlConfig;
+						tPucchCasePara.ucDuplexType = ucDuplexType;
+						tPucchCasePara.wSubFrameNum  = 2;//wSfnSubFrm & 0xF; 
+						tPucchCasePara.ucradioframe =(wSfnSubFrm >>4 )& 0xFFF;       
+						tPucchCasePara.ucHSSSwitch = 0; 
+						tPucchCasePara.ucPreFOCInFre_Enable =1;   
+						tPucchCasePara.ucUeNum = 0;//(rand()%5)+1;
+						tPucchCasePara.ucRBNum = 0;
+						tPucchCasePara.ucNRb2 = 4;
+						tPucchCasePara.ucDeltShift =1; 
+						tPucchCasePara.ucNPUCCH =108;    
+						PUCCHCase(tPucchCasePara,&gtScheVCdat);
+						ReadPUCCHDataDemPara(&gtScheVCdat,&gatScheInfoDdrVC[dCaseIdx][0],&gatVCParaRecd[dCaseIdx][0]);  //gatScheInfoDdr
+					    gatScheInfoDdrVC[dCaseIdx][tPucchCasePara.aucCellIdxInBoard[0]].tCellDemInfo.ucCellMode = m_manuconfig.m_cellmode;  
+						ATP_GetTime(strTime);
+					       cFileTimeExt.Format("%s",strTime);
+					if(1 == m_manuconfig.m_compflg)
+					{
+						CompScheInfoGen(&gatScheInfoDdrVC[dCaseIdx][0],&gatVCParaRecd[dCaseIdx][0],m_manuconfig.m_cellnum);
+					}
+
+					for(dCellIdx = 0; dCellIdx < m_manuconfig.m_cellnum; dCellIdx++)
+					{
+						ScheInfoBigEndianReverse(&gatScheInfoDdrVC[dCaseIdx][dCellIdx],&gatScheInfoDdrDSP[dCaseIdx][dCellIdx]);
+						if(1 == m_manuconfig.m_actestflg)
+						{
+  		           		       ScheInfoACBigEndianReverse(&gatCmac2PulmAntAdjustScheInfoVC[dCaseIdx][dCellIdx],&gatCmac2PulmAntAdjustScheInfoDSP[dCaseIdx][dCellIdx]);
+						}
+					}
+				}
+				else
+				{					
+					for(dCellIdx = 0; dCellIdx < m_manuconfig.m_cellnum; dCellIdx++)
+					{
+						ptScheInfo = &gatScheInfoDdrVC[dCaseIdx][dCellIdx];
+						ptScheInfo->tCellDemInfo.ucDuplexType = ucDuplexType;
+						ptScheInfo->tCellDemInfo.wSfnSubFrm = wSfnSubFrm;
+						ptScheInfo->tCellDemInfo.ucCellMode = m_manuconfig.m_cellmode;
+						ptScheInfo->tCellDemInfo.ucCellIdxInBoard = dCellIdx;
+						if(m_manuconfig.m_railairflg)
+						{
+							ptScheInfo->tCellDemInfo.ucSceneCfg = 2;
+							ptScheInfo->tCellDemInfo.tRailAirPara.ucAlphaPusch=10;
+							ptScheInfo->tCellDemInfo.tRailAirPara.ucFocPreSwitch=1;
+							ptScheInfo->tCellDemInfo.tRailAirPara.ucFocBackSwtich=1;
+							ptScheInfo->tCellDemInfo.tRailAirPara.wFocBackThrQpsk=500;
+							ptScheInfo->tCellDemInfo.tRailAirPara.wFocBackThr16Qam=300;
+							ptScheInfo->tCellDemInfo.tRailAirPara.wFocBackThr64Qam=150;
+							ptScheInfo->tCellDemInfo.tRailAirPara.wFUp=2000;//1500;//yy
+							ptScheInfo->tCellDemInfo.tRailAirPara.wFInitialFix1=2000;
+							ptScheInfo->tCellDemInfo.tRailAirPara.wFInitialFix2=1000;
+							ptScheInfo->tCellDemInfo.tRailAirPara.wFTh1=1600;
+							ptScheInfo->tCellDemInfo.tRailAirPara.wFTh2=600;
+							ptScheInfo->tCellDemInfo.tRailAirPara.wThrdSinr=5;
+						}
+                        #if (PHY_VERSION_FLG == TRUNK2) || (PHY_VERSION_FLG == TRUNK3)
+						if((1 == m_manuconfig.m_dsqflg)&&(1 == ptScheInfo->tCellDemInfo.ucDuplexType)&&(2 ==ucUlDlConfig))
+						{
+							ptScheInfo->tCellDemInfo.ucDynamicSequenceSwitch = 1;
+						}
+						else
+						{
+							ptScheInfo->tCellDemInfo.ucDynamicSequenceSwitch = 0;
+						}
+                        #endif
+
+                        #if (PHY_VERSION_FLG == TRUNK3)
+                                ptScheInfo->tCellDemInfo.ucSelectiveMergeSwitch= 0;//先打桩打开，后续加到界面 yy                            
+                        #endif
+						adCellNum[dCaseIdx] ++;
+					}
+					GenScheInfoSuperCell(gatScheInfoDdrVC[dCaseIdx],gatVCParaRecd[dCaseIdx],m_manuconfig.m_cellnum,0);//最后一个0代表超级小区的起始CP索引，可按照需求修改
+					
+					for(dCellIdx = 0; dCellIdx < m_manuconfig.m_cellnum; dCellIdx++)
+					{	
+						ScheInfoBigEndianReverse(&gatScheInfoDdrVC[dCaseIdx][dCellIdx],&gatScheInfoDdrDSP[dCaseIdx][dCellIdx]);
+						//adCellNum[dCaseIdx] ++;
+					}
+					ATP_GetTime(strTime);
+					cFileTimeExt.Format("%s",strTime);
+				}
+				strprint.Format("第 %d 组参数生成完成\r\n",dCaseIdx+1);
+				UpdateLog(&strprint);
+				if(1 == m_manuconfig.m_actestflg)
+    				{
+					if(1 == bAcFlag)
+					{
+						cFileTimeExt_tmp = cFileTimeExt ;
+					}
+					else if(3 == bAcFlag)
+					{
+						cFileTimeExt = cFileTimeExt_tmp;
+					}
+					if(1 == gatCmac2PulmAntAdjustScheInfoVC[dCaseIdx][dCellIdx].ucActive)
+						{
+							bAcFlag = 1;
+						}
+					else
+					{
+						bAcFlag = 3;
+					}
+				}
+							
+                if(0 == m_manuconfig.m_prachtestflg)
+                {
+    				if((1 == m_GenConfigFlg))
+    				{
+    					memset(&gtPUSCHSimInfo[0],0,sizeof(gtPUSCHSimInfo));
+    					GenSimParaFile(&gatScheInfoDdrVC[dCaseIdx][0],&gatVCParaRecd[dCaseIdx][0]);
+    					cFileTmpPath = m_FilePath_Out.Left(m_FilePath_Out.ReverseFind('\\'));						
+						if(1 == m_manuconfig.m_actestflg)
+    					{
+							str.Format("\\ACScheInfoSfn*_%s",cFileTimeExt);
+    						if(aCtempFind.FindFile(cFileTmpPath + str))
+							 {
+								aCtempFind.FindNextFile();
+						 		if(aCtempFind.IsDirectory()) 
+								{
+									cFileTmpPath = aCtempFind.GetFilePath();
+								}
+							 }
+							 else
+							 {
+	    						str.Format("\\ACScheInfoSfn%d_%s",gatScheInfoDdrVC[dCaseIdx][gtPUSCHSimInfo[dCellIdx].tinitParas.aucCellIdx[0]].tCellDemInfo.wSfnSubFrm, cFileTimeExt);
+								cFileTmpPath = cFileTmpPath + str;
+								if(CreateDirectory(cFileTmpPath, NULL))
+								{
+									CreateDirectory(cFileTmpPath, NULL);
+								}
+							 }
+						}
+    					for(dCellIdx = 0; dCellIdx < MAX_CELL_NUM_ON_BOARD; dCellIdx++)
+    					{
+    						if(0 != gtPUSCHSimInfo[dCellIdx].tinitParas.ucCellNum)
+    						{
+    							str.Format("\\ConfigDataSfn%d_%s",gatScheInfoDdrVC[dCaseIdx][gtPUSCHSimInfo[dCellIdx].tinitParas.aucCellIdx[0]].tCellDemInfo.wSfnSubFrm, cFileTimeExt);
+    							cFilePath_Out = cFileTmpPath + str;
+    							if(CreateDirectory(cFilePath_Out, NULL))
+    							{
+    								CreateDirectory(cFilePath_Out, NULL);
+    							}
+
+    							cFilePath_Out = cFileTmpPath + str + "\\SaveData";
+    							CreateDirectory(cFilePath_Out, NULL);
+    							cFileRootPath = cFileTmpPath + str;
+    							m_readenviro.UpdateData(TRUE);
+    							FTCreateDirectory(&gtPUSCHSimInfo[dCellIdx],&gatScheInfoDdrVC[dCaseIdx][0],m_readenviro.m_FileTileArray[dCaseIdx],cFileRootPath,1);			
+
+    							
+    							cFileRootPath = cFileTmpPath + str;
+    							str.Format("\\SaveData\\Cell%d\\ConfigData.dat",gtPUSCHSimInfo[dCellIdx].tinitParas.aucCellIdx[0]);
+    							cFilePath_Out = cFileRootPath + str;
+    							fp = fopen(cFilePath_Out,"w");
+    							PrintSimFile(fp,&gtPUSCHSimInfo[dCellIdx]);
+    							fclose(fp);
+    							dFileCnt ++;
+    						}
+                            
+    					}
+
+    					if(1 == m_manuconfig.m_actestflg)
+    					{
+							str.Format("\\ConfigDataSfn%d_%s",gatScheInfoDdrVC[dCaseIdx][gtPUSCHSimInfo[dCellIdx].tinitParas.aucCellIdx[0]].tCellDemInfo.wSfnSubFrm, cFileTimeExt);
+							cFileRootPath = cFileTmpPath + str;
+							if(CreateDirectory(cFileRootPath, NULL))
+							{
+								CreateDirectory(cFileRootPath, NULL);
+							}
+    						ret = AcUpLinkLibCall(&gatScheInfoDdrVC[dCaseIdx][0],&gatCmac2PulmAntAdjustScheInfoVC[dCaseIdx][0],&gatVCParaRecd[dCaseIdx][0],&gtPUSCHSimInfo[0],cFileRootPath,1);
+    						ret = ret&0x2000000;
+    					}
+    					else
+    					{
+    			            ret = PuschUpLinkLibCall(&gatScheInfoDdrVC[dCaseIdx][0],&gatVCParaRecd[dCaseIdx][0],&gtPUSCHSimInfo[0],cFileRootPath,1);
+    					}
+    					if((0 == ret)||(0x10000 == ret ))
+    					{
+    						memset(&gatPuschDecResInfo[0][0],0,sizeof(gatPuschDecResInfo));
+    						if(1 == m_manuconfig.m_actestflg)
+    						{							
+    							ACDataReduction(&cFileTmpPath,&cFileTimeExt, &gatScheInfoDdrVC[dCaseIdx][0],gatCmac2PulmAntAdjustScheInfoVC[dCaseIdx][0].ucActive);
+    						}
+    						//else if(1 == m_manuconfig.m_srstestflg)
+    						//{
+    							//SRSDataReduction(&cFileTmpPath,&cFileTimeExt,&gatScheInfoDdrVC[dCaseIdx][0],&gatVCParaRecd[dCaseIdx][0]);
+    						//}
+    						else
+    						{
+    							DataReduction(&cFileTmpPath, &cFileTimeExt, &gatScheInfoDdrVC[dCaseIdx][0],&gatVCParaRecd[dCaseIdx][0],&gatPuschDecResInfo[0][0]);
+    						}
+    						strprint.Format("    数据生成完毕，返回值 %x \r\n",ret);
+    						UpdateLog(&strprint);
+    						UpdateWindow();
+    					}
+    					else
+    					{
+    						strprint.Format("    数据生成异常 \r\n",dCaseIdx+1);
+    						UpdateLog(&strprint);
+    						UpdateWindow();
+    					}
+    				}				
+				
+    				if((1 == m_GendatFlg) && (0 != adCellNum[dCaseIdx]))
+    				{
+    					cFilePath_Out = m_FilePath_Out.Left(m_FilePath_Out.ReverseFind('\\'));
+    					if(1 == m_manuconfig.m_actestflg)
+    					{
+							str.Format("\\ACScheInfoSfn*_%s",cFileTimeExt);
+    						if(aCtempFind.FindFile(cFilePath_Out + str))
+							 {
+								aCtempFind.FindNextFile();
+						 		if(aCtempFind.IsDirectory()) 
+								{
+									cFilePath_Out = aCtempFind.GetFilePath();
+								}
+							 }
+							 else
+							 {
+	    						str.Format("\\ACScheInfoSfn%d_%s",gatScheInfoDdrVC[dCaseIdx][gtPUSCHSimInfo[dCellIdx].tinitParas.aucCellIdx[0]].tCellDemInfo.wSfnSubFrm, cFileTimeExt);
+								cFilePath_Out = cFilePath_Out + str;
+								if(CreateDirectory(cFilePath_Out, NULL))
+								{
+									CreateDirectory(cFilePath_Out, NULL);
+								}
+							 }
+    						AcWriteSchInfoMain(&gatScheInfoDdrVC[dCaseIdx][0],&gatScheInfoDdrDSP[dCaseIdx][0],&gatCmac2PulmAntAdjustScheInfoDSP[dCaseIdx][0],cFilePath_Out,&cFileTimeExt);	
+    					}
+    					else
+    					{
+    					    WriteSchInfoMain(&gatScheInfoDdrVC[dCaseIdx][0],&gatScheInfoDdrDSP[dCaseIdx][0],cFilePath_Out, &cFileTimeExt,m_manuconfig.m_prachtestflg);	
+    					}
+    					strprint = "   解调消息、核分工生成完毕 \r\n";
+    					UpdateLog(&strprint);					
+    				}
+				
+			if((1 == m_GenExelFlg ) && (0 != adCellNum[dCaseIdx]))
+			{	
+				cFilePath_Out = m_FilePath_Out.Left(m_FilePath_Out.ReverseFind('\\'));
+				if(1 == m_manuconfig.m_actestflg)
+				{
+					str.Format("\\ACScheInfoSfn*_%s",cFileTimeExt);
+					if(aCtempFind.FindFile(cFilePath_Out + str))
+					{
+					 	aCtempFind.FindNextFile();
+						if(aCtempFind.IsDirectory()) 
+						{
+							cFilePath_Out = aCtempFind.GetFilePath();
+						}
+					 }
+					else
+					{
+						str.Format("\\ACScheInfoSfn%d_%s",gatScheInfoDdrVC[dCaseIdx][gtPUSCHSimInfo[dCellIdx].tinitParas.aucCellIdx[0]].tCellDemInfo.wSfnSubFrm, cFileTimeExt);
+						cFilePath_Out = cFilePath_Out + str;
+						if(CreateDirectory(cFilePath_Out, NULL))
+						{
+							CreateDirectory(cFilePath_Out, NULL);
+						}
+					}
+				}
+
+                    	for(dCellIdx = 0; dCellIdx < MAX_CELL_NUM_ON_BOARD; dCellIdx++)
+                    	{
+                    		gucWriteExcelCaseNum = 64;
+                    		ptScheInfo = (T_Cmac2PulmDspCellDemInfo *)gatScheInfoDdrVC[dCaseIdx] + dCellIdx;
+                    		if((1 == ptScheInfo->tCellDemInfo.ucCellState)
+                    			|| (2 == ptScheInfo->tCellDemInfo.ucCellState))
+                            {
+                                cFileNameOrig.Format("");
+
+                                if(0 == gatSimControl[0][ptScheInfo->tCellDemInfo.ucCellIdxInBoard].adCaseFlag[0])
+                                {
+                                    if((0 == m_manuconfig.m_supercellflg)&&(0 == m_manuconfig.m_compflg))
+                                    {
+                                          cFileTemp.Format("PUSCH_Normal");
+                                    }
+                                    else if((0 == m_manuconfig.m_supercellflg)&&(1 == m_manuconfig.m_compflg))
+                                    {
+                                        cFileTemp.Format("PUSCH_Comp");
+                                    }
+                                    else if((1 == m_manuconfig.m_supercellflg)&&(0 == m_manuconfig.m_railairflg))
+
+                                    {
+                                        cFileTemp.Format("PUSCH_SuperCell");
+
+                                    }
+                                    else if((1 == m_manuconfig.m_supercellflg)&&(1 == m_manuconfig.m_railairflg))
+                                    {
+                                        cFileTemp.Format("PUSCH_Highway");
+                                    }
+             
+                                }
+                                else if(1 == gatSimControl[0][ptScheInfo->tCellDemInfo.ucCellIdxInBoard].adCaseFlag[1])
+                                {
+                                     cFileTemp.Format("PUCCH");
+					  			gucWriteExcelCaseNum = 128;
+                                }
+                                else if(2 == gatSimControl[0][ptScheInfo->tCellDemInfo.ucCellIdxInBoard].adCaseFlag[2])
+                                {
+                                     cFileTemp.Format("RACH");
+                                }
+                                else if(3 == gatSimControl[0][ptScheInfo->tCellDemInfo.ucCellIdxInBoard].adCaseFlag[3])
+                                {
+                                     cFileTemp.Format("SRS");
+                                }
+                                else if(4 == gatSimControl[0][ptScheInfo->tCellDemInfo.ucCellIdxInBoard].adACCaseFlag)
+                                {
+                                     cFileTemp.Format("AC_");
+								    cFileNameOrig+=cFileTemp;
+									if(0 == gatCmac2PulmAntAdjustScheInfoVC[dLoopCnt][0].ucACType)
+									{
+										cFileTemp.Format("下行校正_%d次_功率delta%d",gatCmac2PulmAntAdjustScheInfoVC[dLoopCnt][0].ucReptNum,gatCmac2PulmAntAdjustScheInfoVC[dLoopCnt][0].ucACSendPowdelta);
+									}
+									else if(1 == gatCmac2PulmAntAdjustScheInfoVC[dLoopCnt][0].ucACType)
+									{
+										cFileTemp.Format("上行校正_%d次_功率delta%d",gatCmac2PulmAntAdjustScheInfoVC[dLoopCnt][0].ucReptNum,gatCmac2PulmAntAdjustScheInfoVC[dLoopCnt][0].ucACSendPowdelta);
+									}
+                                }
+                                else
+                                {
+                                     cFileTemp.Format("Err");
+                                }
+                                
+                                cFileNameOrig+=cFileTemp;
+
+                                switch(ptScheInfo->tCellDemInfo.ucUlBandwidth)
+                                {
+                                    case 100:
+                                          cFileTemp.Format("_20M");
+                                          break;
+                                    case 75:
+                                          cFileTemp.Format("_15M");
+                                          break;
+                                    case 50:
+                                          cFileTemp.Format("_10M");
+                                          break;
+                                    case 25:
+                                          cFileTemp.Format("_5M");
+                                          break;
+                                    case 15:
+                                          cFileTemp.Format("_3M");
+                                          break;
+                                    case 6:
+                                          cFileTemp.Format("_1.4M");
+                                          break;
+                                }
+               
+                                cFileNameOrig+=cFileTemp;
+								if(4 == gatSimControl[0][ptScheInfo->tCellDemInfo.ucCellIdxInBoard].adACCaseFlag)
+								{
+											cFileTemp.Format("_%dAnt_Sfn%d",ptScheInfo->tCellDemInfo.ucUlAntNum,ptScheInfo->tCellDemInfo.wSfnSubFrm);
+								}
+								else
+								{
+                                if(0 == ptScheInfo->tCellDemInfo.ucDuplexType)
+                                {
+                                	if(3 == gatSimControl[0][ptScheInfo->tCellDemInfo.ucCellIdxInBoard].adCaseFlag[3])
+                                	{
+	                             	   	if(0 == gatSimControl[0][ptScheInfo->tCellDemInfo.ucCellIdxInBoard].ucSrsFreqEsti)
+										{
+											cFileTemp.Format("_Freq_FDD_CellMode%d_%dSym_%dUE_%dRB_%dAnt_Sfn%d", ptScheInfo->tCellDemInfo.ucCellMode,ptScheInfo->atSrsCellScheInfo[0].ucSymNum,ptScheInfo->atSrsCellScheInfo[0].atSrsSymScheInfo[0].ucSrsFreUeNum + ptScheInfo->atSrsCellScheInfo[0].atSrsSymScheInfo[1].ucSrsFreUeNum,ptScheInfo->atSrsCellScheInfo[0].atSrsSymScheInfo[0].atUeScheInst[0].ucRbNum,ptScheInfo->tCellDemInfo.ucUlAntUsdNum,wSfnSubFrm);
+										}
+										else
+										{
+											cFileTemp.Format("_Time_FDD_CellMode%d_%dSym_%dUE_%dRB_%dAnt_Sfn%d", ptScheInfo->tCellDemInfo.ucCellMode,ptScheInfo->atSrsCellScheInfo[0].ucSymNum,ptScheInfo->atSrsCellScheInfo[0].atSrsSymScheInfo[0].ucSrsFreUeNum + ptScheInfo->atSrsCellScheInfo[0].atSrsSymScheInfo[1].ucSrsFreUeNum,ptScheInfo->atSrsCellScheInfo[0].atSrsSymScheInfo[0].atUeScheInst[0].ucRbNum,ptScheInfo->tCellDemInfo.ucUlAntUsdNum,wSfnSubFrm);
+										}
+                                	}
+									else
+									{
+										 cFileTemp.Format("_FDD_%dCell_%dAnt_Mode%d_Sfn%d",adCellNum[dCaseIdx],ptScheInfo->tCellDemInfo.ucUlAntNum,ptScheInfo->tCellDemInfo.ucCellMode,ptScheInfo->tCellDemInfo.wSfnSubFrm);
+									}
+                                }
+                                else
+                                {
+									if(3 == gatSimControl[0][ptScheInfo->tCellDemInfo.ucCellIdxInBoard].adCaseFlag[3])
+									{
+										if(0 == gatSimControl[0][ptScheInfo->tCellDemInfo.ucCellIdxInBoard].ucSrsFreqEsti)
+										{
+											cFileTemp.Format("_Freq_TDD_CellMode%d_%dSym_%dUE_%dRB_%dAnt_Sfn%d", ptScheInfo->tCellDemInfo.ucCellMode,ptScheInfo->atSrsCellScheInfo[0].ucSymNum,ptScheInfo->atSrsCellScheInfo[0].atSrsSymScheInfo[0].ucSrsFreUeNum + ptScheInfo->atSrsCellScheInfo[0].atSrsSymScheInfo[1].ucSrsFreUeNum,ptScheInfo->atSrsCellScheInfo[0].atSrsSymScheInfo[0].atUeScheInst[0].ucRbNum,ptScheInfo->tCellDemInfo.ucUlAntUsdNum,wSfnSubFrm);
+										}
+										else
+										{
+											cFileTemp.Format("_Time_TDD_CellMode%d_%dSym_%dUE_%dRB_%dAnt_Sfn%d", ptScheInfo->tCellDemInfo.ucCellMode,ptScheInfo->atSrsCellScheInfo[0].ucSymNum,ptScheInfo->atSrsCellScheInfo[0].atSrsSymScheInfo[0].ucSrsFreUeNum + ptScheInfo->atSrsCellScheInfo[0].atSrsSymScheInfo[1].ucSrsFreUeNum,ptScheInfo->atSrsCellScheInfo[0].atSrsSymScheInfo[0].atUeScheInst[0].ucRbNum,ptScheInfo->tCellDemInfo.ucUlAntUsdNum,wSfnSubFrm);
+										}
+									}
+									else
+									{
+											cFileTemp.Format("_TDD_%dCell_%dAnt_Mode%d_Sfn%d",adCellNum[dCaseIdx],ptScheInfo->tCellDemInfo.ucUlAntNum,ptScheInfo->tCellDemInfo.ucCellMode,ptScheInfo->tCellDemInfo.wSfnSubFrm);
+									}
+								}
+							}
+                            cFileNameOrig+=cFileTemp;
+
+                             break;
+
+                            }
+	                    }
+
+                        WriteExcelMain(gatScheInfoDdrVC[dCaseIdx],gatCmac2PulmAntAdjustScheInfoVC[dCaseIdx],gatVCParaRecd[dCaseIdx],adCellNum[dCaseIdx],cFilePath_Out, &cFileTimeExt,&cFileNameOrig);
+    					strprint = "   xls文件生成完毕 \r\n";
+    					UpdateLog(&strprint);
+    				}
+            }
+			
+			else
+			{
+				memset(&gtPrachSimInfo,0,sizeof(gtPrachSimInfo));
+				RACHGenSimParaFile(&gatLramInCellParaBuffer[dCaseIdx][0],gatLramParamInfoFT[dCaseIdx]);
+
+				cFileTmpPath = m_FilePath_Out.Left(m_FilePath_Out.ReverseFind('\\'));
+				gtPrachSimInfo.tinitParas.SaveDataFlg = gdPrachSaveFlag;
+				for(dCellIdx = 0; dCellIdx < 1; dCellIdx++)//只调用一次仿真，6个小区同时输出仿真结果
+    			{
+    					if(0 == (gatLramInCellParaBuffer[dCaseIdx][dCellIdx].ucCellEn & 0x1))
+						{
+							continue;
+						}
+
+    						str.Format("\\ConfigDataSfn%d_%s", wSfnSubFrm,cFileTimeExt);
+    						cFilePath_Out = cFileTmpPath + str;
+    						if(CreateDirectory(cFilePath_Out, NULL))
+    						{
+    							CreateDirectory(cFilePath_Out, NULL);
+    						}
+
+    						cFilePath_Out = cFilePath_Out+ "\\SaveData";
+    						CreateDirectory(cFilePath_Out, NULL);						      
+    						m_readenviro.UpdateData(TRUE);
+							
+					  		str.Format("\\Cell%d", gatLramInCellParaBuffer[dCaseIdx][dCellIdx].ucCellIdx);      
+                                                                                 
+
+							cFileRootPath = cFilePath_Out + str;                                              
+							if(CreateDirectory(cFileRootPath, NULL))
+    						{
+    							CreateDirectory(cFileRootPath, NULL);
+    						}                                                
+                                                                                
+							cFilePath_Out = cFileRootPath + "\\Emulator";                                     
+							if(CreateDirectory(cFilePath_Out, NULL))
+    						{
+    							CreateDirectory(cFilePath_Out, NULL);
+    						}
+							sprintf(sPath[1],"%s",cFilePath_Out);
+							ATP_CreateSimDir(sPath[1],1024);                                                  
+	                                                                                  
+							cFilePath_Out = cFileRootPath  + "\\Dsp";                                   
+							if(CreateDirectory(cFilePath_Out, NULL))
+    						{
+    							CreateDirectory(cFilePath_Out, NULL);
+    						} 
+
+							str.Format("\\ConfigData.dat");
+							cFilePath_Out = cFileRootPath + str;
+							fp = fopen(cFilePath_Out,"w");
+							RachPrintSimFile(fp,&gtPrachSimInfo);
+
+							strcpy(gtPrachSimInfo.atcellParas[gatLramInCellParaBuffer[dCaseIdx][dCellIdx].ucCellIdx].acSimDataPath,cFileRootPath);					
+							fclose(fp);
+							dFileCnt ++;
+					}
+
+					 ret = PrachUpLinkLibCall(&gatLramInCellParaBuffer[dCaseIdx][0],&gtPrachSimInfo);
+					if((1 == m_GenExelFlg ) && (0 != adRachCellNum[dCaseIdx]))
+					{	
+						cFilePath_Out = m_FilePath_Out.Left(m_FilePath_Out.ReverseFind('\\'));
+					    RachWriteExcelMain(gatLramInCellParaBuffer[dCaseIdx],gatLramParamInfoFT[dCaseIdx],gatScheInfoDdrVC[dCaseIdx],adRachCellNum[dCaseIdx],wSfnSubFrm,cFilePath_Out,cFileTimeExt);
+						strprint = "   xls文件生成完毕 \r\n";
+						UpdateLog(&strprint);
+					}
+					if((1 == m_GendatFlg) && (0 != adRachCellNum[dCaseIdx]))
+					{
+						cFilePath_Out = m_FilePath_Out.Left(m_FilePath_Out.ReverseFind('\\'));
+						WriteSchInfoMain(&gatScheInfoDdrVC[dCaseIdx][0],&gatScheInfoDdrDSP[dCaseIdx][0],cFilePath_Out, &cFileTimeExt,m_manuconfig.m_prachtestflg);	
+						RachWriteSchInfoMain(&gatLramInCellParaBuffer[dCaseIdx][0],dCaseIdx, &gatLramParamInfoFT[dCaseIdx][0], cFilePath_Out,1,wSfnSubFrm,&cFileTimeExt);	
+						memset(&gatPulm2UlCmacSim.atPulm2MulsdCellMsg1Info[0][0],0, sizeof(T_Pulm2MulsdCellMsg1Info)*10*6);
+						memset(&gaxwLramDdcDataA[0][0][0][0][0],0, sizeof(CMPL16)*3*2*2*8*1536);
+						memset(&gaxwLramDdcDataB[0][0][0][0][0],0, sizeof(CMPL16)*3*2*2*8*1536);
+						RachDataReduction(&cFilePath_Out,&cFileTimeExt,wSfnSubFrm,&gatLramInCellParaBuffer[dCaseIdx][0],&gatLramParamInfoFT[dCaseIdx][0],dCaseIdx);
+						strprint = "    解调消息、核分工生成完毕 \r\n";
+						UpdateLog(&strprint);					
+					}	
+				}
+			}
+			dDataReady = 1;
+			gdmanuconfigFlg = 1;
+			dRecoverCase0Flg = 0;
+			if((1 == m_GendatFlg)&&(1 == m_GenConfigFlg))
+			{
+				dRecoverCase0Flg = 1;
+				goto Label1;
+
+			}
+			else
+			{
+				dRecoverCase0Flg = 0;
+			}
+			break;
+		}
+		
+	case 2:
+		{			
+			strprint = "开始数据转换\r\n\r\n";	
+			UpdateLog(&strprint);	
+
+			dLoopCnt = 0;
+			bAcFlag = 0;
+			bAcTmpFlag = 0;
+			memset(&gatScheInfoDdrVC[0][0],0,sizeof(gatScheInfoDdrVC));
+			cFileTmpPath = m_datareform.m_FileTileArray[0].Left(m_datareform.m_FileTileArray[0].ReverseFind('\\'));
+			cFileNameExt = m_datareform.m_FileTileArray[dLoopCnt].Right(3);
+			 bPrachFlag = pRachtempFind.FindFile(cFileTmpPath + _T("\\Prach_*.xls"));
+			 if(1 == bPrachFlag)
+			{
+				m_manuconfig.m_prachtestflg = 1;
+			}
+			 else
+			 {
+				  m_manuconfig.m_prachtestflg = 0;
+			 }
+			 			  
+			if(0 == m_datareform.m_ReFormAll)
+			{
+				if(1 == m_manuconfig.m_prachtestflg)
+				{
+					bFound = 0;
+				}
+				else
+				{
+					bFound = tempFind.FindFile(cFileTmpPath + _T("\\*.xls"));
+				}
+				
+			}
+			else
+			{
+				bFound = 0;
+				bPrachFlag = 0;
+			}		
+			if ((pPUCCHtempFind.FindFile(cFileTmpPath + _T("\\PUCCH_*.xls")) )||(pPUCCHtempFind.FindFile(cFileTmpPath + _T("\\AtpParas_Pucch*.xls"))) )
+			{
+			       gucReadExcelCaseNum = 128;
+			        gucWriteExcelCaseNum = 128;
+			}	
+			else
+			{
+			       gucReadExcelCaseNum = 64;
+				 gucWriteExcelCaseNum = 64;
+			}
+
+			/*AC的数据转换没有单独的功能，文件夹遍历的功能中添加了*/
+			if((0 ==m_datareform.m_TestFileCaseAllFlg)&&(0 == m_datareform.m_ReFormAll))//遍历文件夹开关，命名为FTDATA_Case*
+			{
+				bAcTmpFlag = aCtempFind.FindFile(cFileTmpPath + _T("\\AC*.xls"));
+				cFilePath_tmp= cFileTmpPath.Left(cFileTmpPath.ReverseFind('\\'));
+				cFilePath_tmp = cFilePath_tmp.Left(cFilePath_tmp.ReverseFind('\\'));
+
+				if(1 == bAcTmpFlag)
+				{
+					cFilePath_tmp2 = cFilePath_tmp;
+					cFilePath_tmp = cFilePath_tmp.Left(cFilePath_tmp.ReverseFind('\\'));
+					bAcFlag = 0;
+					bAcTmpFlag = 0;
+				}
+				if(FileCaseFind.FindFile(cFilePath_tmp+_T("\\FT_Case*")))
+				{
+					bAllDataReduction = 1;
+				}
+				else
+				{
+					bAllDataReduction = 0;
+				}
+
+				
+			}
+			else
+			{
+					bAllDataReduction = 0;
+					bAcTmpFlag = 0;
+					
+
+			}
+
+			dAcFileCnt = 0;
+			dCaseCnt = 0;
+			dAcCaseRealCnt = 0;
+			do
+			{
+
+				dEachFileCaseCnt = 0;
+				if(((1 == bAllDataReduction)||(1 == bAcTmpFlag))&&(0 == m_datareform.m_ReFormAll))
+				{
+					if(1 == bAcTmpFlag)
+					{
+						
+						cFilePath_tmp2 = cFilePath_tmp2;
+						
+						bAcTmpFlag = aCtempFind.FindNextFile();
+						cFileInPath = aCtempFind.GetFilePath()+ "\\ScheInfo";
+			
+					}
+					else
+					{
+						
+						bAllDataReduction = FileCaseFind.FindNextFile();
+
+						cFilePath_tmp2 = FileCaseFind.GetFilePath();
+						
+						if(aCtempFind.FindFile(cFilePath_tmp2 + _T("\\ACScheInfoSfn*")) )
+						{
+							bAcTmpFlag = aCtempFind.FindNextFile();
+							bAcFlag = 1;
+							cFileInPath = aCtempFind.GetFilePath()+ "\\ScheInfo";
+						}
+						else
+						{
+							cFileInPath =cFilePath_tmp2 +"\\ScheInfo";
+						};	
+					
+						
+					}
+
+					bPrachFlag = pRachtempFind.FindFile(cFileInPath + _T("\\Prach_*.xls"));
+					
+					 if(1 == bPrachFlag)
+					 {
+			 			bFound = 0;
+						m_manuconfig.m_prachtestflg = 1;
+					 }
+					 else
+					 {
+						bFound = tempFind.FindFile(cFileInPath + _T("\\*.xls"));
+						m_manuconfig.m_prachtestflg = 0;
+
+					 }
+			
+				}
+				while((m_datareform.m_FileTileArray[dLoopCnt].GetLength() != 0) || (1 == bFound) || (1 == bPrachFlag))
+				{
+					if(0 == m_datareform.m_ReFormAll)
+						{
+							if(1 == m_manuconfig.m_prachtestflg)
+							{
+								bPrachFlag = pRachtempFind.FindNextFile();
+									// skip . and .. files; otherwise, we'd
+									// recur infinitely!
+								if (pRachtempFind.IsDots() || pRachtempFind.IsDirectory())
+								continue;
+								cFileInPath = pRachtempFind.GetFilePath() ;
+							}
+							else
+							{
+								bFound = tempFind.FindNextFile();
+								// skip . and .. files; otherwise, we'd
+								// recur infinitely!
+								if (tempFind.IsDots() || tempFind.IsDirectory())
+								continue;
+								cFileInPath = tempFind.GetFilePath() ;
+							}	
+						}
+						else
+						{
+							cFileInPath = m_datareform.m_FileTileArray[dLoopCnt];
+						}	
+					if(cFileNameExt == "bin")
+					{
+						fp = fopen(m_datareform.m_FileTileArray[dLoopCnt],"r+b");
+						ReadData(fp,&gatScheInfoDdrDSP[dLoopCnt][0]);  //gatScheInfoDdr		
+						fclose(fp);
+					}
+					else if(cFileNameExt == "dat")
+					{
+						memset(&gatScheInfoDdrDSP[dLoopCnt][0],0,sizeof(T_Cmac2PulmDspCellDemInfo)*MAX_CELL_NUM_ON_BOARD);
+						fp = fopen(m_datareform.m_FileTileArray[dLoopCnt],"r+b");
+						if(0 == m_manuconfig.m_prachtestflg)
+						{
+							ReadDataDat(fp,&gatScheInfoDdrDSP[dLoopCnt][0]);  //gatScheInfoDdr
+						}
+						else
+						{
+							RachReadDataDat(fp,&gatLramInCellParaBuffer[dLoopCnt][0]);  //gatScheInfoDdr		
+
+						}		
+						fclose(fp);	
+					}
+					else if(cFileNameExt == "xls")
+					{
+						
+						if(0 == m_manuconfig.m_prachtestflg)
+						{
+							memset(&gatExcelScheInfo[0][0],0,sizeof(gatExcelScheInfo));
+							ReadFromExcel(gatExcelScheInfo[0],cFileInPath,6);
+							
+							memset(&gatScheInfoDdrVC[dLoopCnt][0],0,sizeof(T_Cmac2PulmDspCellDemInfo)*MAX_CELL_NUM_ON_BOARD);
+							memset(&gatVCParaRecd[dLoopCnt][0],0,sizeof(T_FTCasePara)*MAX_CELL_NUM_ON_BOARD);
+							memset(&gatCmac2PulmAntAdjustScheInfoVC[dLoopCnt][0],0,sizeof(T_Cmac2PulmAntAdjustScheInfo)*MAX_CELL_NUM_ON_BOARD);
+							
+							ExelToScheInfo(gatExcelScheInfo[0],&gatScheInfoDdrVC[dLoopCnt][0],&gatCmac2PulmAntAdjustScheInfoVC[dLoopCnt][0],&gatVCParaRecd[dLoopCnt][0]);
+						}
+						else
+						{
+							memset(&gatExcelRACHInfo[0][0],0,sizeof(gatExcelRACHInfo));
+							RachReadFromExcel(gatExcelRACHInfo[0],cFileInPath,6);
+
+							memset(&gatScheInfoDdrVC[dLoopCnt][0],0,sizeof(T_Cmac2PulmDspCellDemInfo)*MAX_CELL_NUM_ON_BOARD);
+							memset(&gatLramInCellParaBuffer[dLoopCnt][0],0,sizeof(T_Cmac2PulmPrachDemInfo)*MAX_CELL_NUM_ON_BOARD);
+							memset(&gatLramParamInfoFT[dLoopCnt][0],0,sizeof(T_PrachParamInfoTest)*MAX_CELL_NUM_ON_BOARD);
+							memset(&gatParamMsgInfoA[dLoopCnt], 0, sizeof(T_PrachParamMsgInfo)*10*6);
+							memset(&gatParamMsgInfoB[dLoopCnt], 0, sizeof(T_PrachParamMsgInfo)*10*6);
+							memset(&gatLramParamInfoTestDSP[dLoopCnt][0], 0, sizeof(T_Cmac2PulmPrachDemInfo)*MAX_CELL_NUM_ON_BOARD);
+							
+							RachExelToScheInfo(gatExcelRACHInfo[0],&gatScheInfoDdrVC[dLoopCnt][0],&gatLramInCellParaBuffer[dLoopCnt][0],&gatLramParamInfoFT[dLoopCnt][0], dLoopCnt);		
+							for(dCellIdx = 0; dCellIdx < MAX_CELL_NUM_ON_BOARD; dCellIdx++)
+    							{	
+
+								if(1 != (gatLramInCellParaBuffer[dLoopCnt][dCellIdx].ucCellEn & 0x1))
+								{
+									continue;
+								}
+								else
+								{
+									adRachCellNum[dLoopCnt] ++;
+								}
+							}
+						}
+						
+						for(dCellIdx = 0; dCellIdx < MAX_CELL_NUM_ON_BOARD; dCellIdx++)
+						{
+							ScheInfoBigEndianReverse(&gatScheInfoDdrVC[dLoopCnt][dCellIdx],&gatScheInfoDdrDSP[dLoopCnt][dCellIdx]);
+							if((1 == gatScheInfoDdrVC[dLoopCnt][dCellIdx].tCellDemInfo.ucCellState)
+								|| (2 == gatScheInfoDdrVC[dLoopCnt][dCellIdx].tCellDemInfo.ucCellState))
+							{
+								adCellNum[dLoopCnt] ++;
+								wSfnSubFrm = gatScheInfoDdrVC[dLoopCnt][dCellIdx].tCellDemInfo.wSfnSubFrm;
+							}
+						}					
+					}
+					else
+					{
+						strprint = "输入数据类型错误!!\r\n\r\n";
+						
+						UpdateData(TRUE);
+						m_Progress = m_Progress + strprint;
+						UpdateData(FALSE);	
+						//fclose(fp);
+						break;
+						//MessageBox("输入数据类型错误"); 
+					}
+
+                
+					memcpy(&gatScheInfoDdrVC[dLoopCnt][0],&gatScheInfoDdrDSP[dLoopCnt][0],sizeof(T_Cmac2PulmDspCellDemInfo)*MAX_CELL_NUM_ON_BOARD);
+					for(dCellIdx = 0; dCellIdx < MAX_CELL_NUM_ON_BOARD; dCellIdx++)
+					{
+						ScheInfoBigEndianReverse(&gatScheInfoDdrDSP[dLoopCnt][dCellIdx],&gatScheInfoDdrVC[dLoopCnt][dCellIdx]);
+					}
+					
+					cFileTmpPath=cFileInPath.Left(cFileInPath.ReverseFind('\\'));
+					cFileTmpPath = cFileTmpPath.Left(cFileTmpPath.ReverseFind('\\'));
+
+					cFileTimeExt = cFileInPath.Right(7);
+					cFileTimeExt = cFileTimeExt.Left(1);
+					if("_" == cFileTimeExt)
+					{
+						cFileTimeExt = cFileInPath.Right(21);
+						cFileTimeExt = cFileTimeExt.Left(17);
+					}
+					 else
+					 {
+						  ATP_GetTime(strTime);
+						  cFileTimeExt.Format("%s",strTime);
+					}
+
+
+				if(0 == m_manuconfig.m_prachtestflg)
+					{
+						if(4 == gatVCParaRecd[dLoopCnt][0].dACCaseFlag)
+						{
+					    		AcWriteSchInfoMain(&gatScheInfoDdrVC[dLoopCnt][0],&gatScheInfoDdrDSP[dLoopCnt][0],&gatCmac2PulmAntAdjustScheInfoVC[dLoopCnt][0],cFileTmpPath,&cFileTimeExt);
+
+						}
+						else if((1 == m_GendatFlg) && (0 != adCellNum[dLoopCnt]))
+						{
+							WriteSchInfoMain(&gatScheInfoDdrVC[dLoopCnt][0],&gatScheInfoDdrDSP[dLoopCnt][0],cFileTmpPath, &cFileTimeExt,m_manuconfig.m_prachtestflg);	
+						}
+						memset(&gatPuschDecResInfo[0][0],0,sizeof(gatPuschDecResInfo));
+
+						if(4 == gatVCParaRecd[dLoopCnt][0].dACCaseFlag)
+						{
+							dAcFileCnt++;
+							if(1 == gatCmac2PulmAntAdjustScheInfoVC[dLoopCnt][0].ucActive)
+							{
+								dAcCaseRealCnt++;
+							}
+							ACDataReduction(&cFileTmpPath,&cFileTimeExt,&gatScheInfoDdrVC[dLoopCnt][0],gatCmac2PulmAntAdjustScheInfoVC[dLoopCnt][0].ucActive);	
+						}
+						else
+						{
+							DataReduction(&cFileTmpPath,&cFileTimeExt,&gatScheInfoDdrVC[dLoopCnt][0],&gatVCParaRecd[dLoopCnt][0],&gatPuschDecResInfo[0][0]);
+						}
+					}
+					else
+					{
+						WriteSchInfoMain(&gatScheInfoDdrVC[dLoopCnt][0],&gatScheInfoDdrDSP[dLoopCnt][0],cFileTmpPath, &cFileTimeExt,m_manuconfig.m_prachtestflg);	
+						RachWriteSchInfoMain(&gatLramInCellParaBuffer[dLoopCnt][0],dLoopCnt, &gatLramParamInfoFT[dLoopCnt][0], cFileTmpPath,1,wSfnSubFrm,&cFileTimeExt);	
+						memset(&gatPulm2UlCmacSim.atPulm2MulsdCellMsg1Info[0][0],0, sizeof(T_Pulm2MulsdCellMsg1Info)*10*6);
+						memset(&gaxwLramDdcDataA[0][0][0][0][0],0, sizeof(CMPL16)*3*2*2*8*1536);
+						memset(&gaxwLramDdcDataB[0][0][0][0][0],0, sizeof(CMPL16)*3*2*2*8*1536);
+						RachDataReduction(&cFileTmpPath,&cFileTimeExt,wSfnSubFrm,&gatLramInCellParaBuffer[dLoopCnt][0],&gatLramParamInfoFT[dLoopCnt][0],dLoopCnt);
+					}
+					dLoopCnt++;
+				dEachFileCaseCnt++;
+				dCaseCnt++;
+					if(100 == dLoopCnt)
+					{
+						memset(adCellNum,0,sizeof(adCellNum));
+						memset(adRachCellNum,0,sizeof(adRachCellNum));
+					}
+					dLoopCnt = dLoopCnt % 100;
+					dDataReady = 1;
+					
+					strprint.Format("第 %d 组转换完成\r\n",dLoopCnt);
+					UpdateLog(&strprint);				
+				}
+				if(0==bAcFlag)
+				{
+					dCaseFileIdx++;
+				}
+				else if((0 ==bAcTmpFlag )&&(1 == bAcFlag))
+				{
+					dCaseFileIdx++;
+
+				}
+				
+				if((0 == m_datareform.m_ReFormAll)&&(0 ==m_datareform.m_TestFileCaseAllFlg)
+					&&(0 ==bAcTmpFlag ))
+					
+				{
+
+					if((1 ==bAcFlag )&&(0 == bAcTmpFlag))
+					{
+						bAcFlag = 0;
+						
+
+						cFileRootPath = cFileInPath.Left(cFileInPath.ReverseFind('\\'));
+						cFileRootPath = cFileRootPath.Left(cFileRootPath.ReverseFind('\\'));
+						cFileRootPath = cFileRootPath.Left(cFileRootPath.ReverseFind('\\'));
+						dFindPos = cFileRootPath.ReverseFind('\\');//yy add
+
+						cFileNameOrig = cFileRootPath.Right(cFileRootPath.GetLength()-1-dFindPos);
+
+						str = cFileRootPath + "\\LogReFormAll.txt";
+						fp = fopen(str,"a");
+						   strprint.Format ( "%s  数据转换完成:共%d 组\r\n",cFileNameOrig,dAcCaseRealCnt);
+					}
+					else
+					{
+						cFileRootPath = cFileInPath.Left(cFileInPath.ReverseFind('\\'));
+						
+						
+						cFileRootPath = cFileRootPath.Left(cFileRootPath.ReverseFind('\\'));
+						dFindPos = cFileRootPath.ReverseFind('\\');//yy add
+						cFileNameOrig = cFileRootPath.Right(cFileRootPath.GetLength()-1-dFindPos);
+						str = cFileRootPath + "\\LogReFormAll.txt";
+						fp = fopen(str,"a");
+						   strprint.Format ( "%s  数据转换完成:共%d 组\r\n",cFileNameOrig,dEachFileCaseCnt);
+
+						
+					}
+								
+					if(fp!=NULL)
+					{
+							fprintf(fp,"%s",strprint);
+							
+							fclose(fp);
+					}
+
+					UpdateLog(&strprint);
+				}
+
+
+				
+			}while(((1 == bAllDataReduction)||(1 == bAcTmpFlag)));
+
+
+			dCaseCnt = dCaseCnt - dAcFileCnt+dAcCaseRealCnt;
+
+			if((0 == m_datareform.m_ReFormAll)&&(0 ==m_datareform.m_TestFileCaseAllFlg))
+			{
+				cFileRootPath = cFileRootPath.Left(cFileRootPath.ReverseFind('\\'));
+				
+				str = cFileRootPath + "\\LogReFormAll.txt";
+				fp = fopen(str,"a");
+				strprint = "所有用例集转换完成:\n";
+
+				strprint2.Format("   遍历FT_Case*文件夹%d 个，转换用例总数:%d  \r\n",dCaseFileIdx,dCaseCnt);
+
+				strprint+=strprint2;
+				if(fp!=NULL)
+				{
+						fprintf(fp,"%s",strprint);
+						
+						fclose(fp);
+				}
+			}
+			else
+			{
+				strprint = "所有用例集转换完成:\n";
+
+				strprint2.Format("   遍历FT_Case*文件夹%d 个，转换用例总数:%d  \r\n",dCaseFileIdx,dCaseCnt);
+
+				strprint+=strprint2;
+			
+			}
+			UpdateLog(&strprint);
+			
+			//cFileNameExt = m_readenviro.m_FilePath_In.Right(3);
+			m_GenConfigFlg = 0;
+			m_GendatFlg = 0;
+			m_GenbinFlg = 0;  //数据转换时不生成配置文件
+			m_GenExelFlg = 0;
+			gdmanuconfigFlg = 0;
+			if(0 == m_datareform.m_ReFormAll)
+			{
+				dRecoverCase0Flg = 1;
+				m_dspdatatest.m_TestAllFlg = 0;  /* 单文件夹遍历转换，自动单文件夹灌数*/
+			}
+			if((0 == m_datareform.m_ReFormAll)&&(0 ==m_datareform.m_TestFileCaseAllFlg))
+			{
+				m_dspdatatest.m_TestFileCaseAllFlg = 0;/* 如果文件夹遍历模式转换完成自动文件夹遍历模式灌数 */
+				
+			}
+			
+			m_FilePath_Out = cFileInPath.Left(cFileInPath.ReverseFind('\\'));
+		//	m_FilePath_Out =m_FilePath_Out.Left(m_FilePath_Out.ReverseFind('\\')) ;	
+			goto Label1;
+			break;
+		}
+Label1: 	case 3:
+		{
+			
+			CString cFileBackPath;
+			strprint = "监控灌数开始\r\n\r\n";		
+			UpdateLog(&strprint);
+
+			m_dspdatatest.UpdateData(TRUE);
+			strncpy(gcDspCoreIp,(LPCTSTR)m_dspdatatest.m_DspIP,sizeof(gcDspCoreIp)); //gcDspCoreIp[64] = m_dspdatatest.m_DspIP;
+			strncpy(gcCCIp,(LPCTSTR)m_dspdatatest.m_CCIP,sizeof(gcCCIp)); //gcCCIp[64] = m_dspdatatest.m_CCIP;
+			sscanf(m_dspdatatest.m_SchAddr,"%x",&gdScheInfoAddr[0]);  
+			sscanf(m_dspdatatest.m_SymAddr,"%x",&gdPuschSymCoreInfoAddr[0]);  
+			sscanf(m_dspdatatest.m_BitAddr,"%x",&gdPuschBitCoreInfoAddr[0]);  
+			sscanf(m_dspdatatest.m_PucchAddr,"%x",&gdPucchCoreInfoAddr[0]);  
+			sscanf(m_dspdatatest.m_RsAddr,"%x",&gdRsConjAddr[0]);  
+			sscanf(m_dspdatatest.m_NiHistAddr,"%x",&gdPniHistAddr[0]);  
+			sscanf(m_dspdatatest.m_DecAddr,"%x",&gdDecResAddr[0]); 
+			sscanf(m_dspdatatest.m_SchAddrB,"%x",&gdScheInfoAddr[1]);  
+			sscanf(m_dspdatatest.m_SymAddrB,"%x",&gdPuschSymCoreInfoAddr[1]);  
+			sscanf(m_dspdatatest.m_BitAddrB,"%x",&gdPuschBitCoreInfoAddr[1]);  
+			sscanf(m_dspdatatest.m_PucchAddrB,"%x",&gdPucchCoreInfoAddr[1]);  
+			sscanf(m_dspdatatest.m_RsAddrB,"%x",&gdRsConjAddr[1]);  
+			sscanf(m_dspdatatest.m_NiHistAddrB,"%x",&gdPniHistAddr[1]);  
+			sscanf(m_dspdatatest.m_DecAddrB,"%x",&gdDecResAddr[1]); 
+//			sscanf(m_dspdatatest.m_PrachADdrA,"%x",&gatLramInCellParaBufferddr[0]); 
+//			sscanf(m_dspdatatest.m_PrachADdrA,"%x",&gatLramInCellParaBufferddr[1]); 
+//			sscanf(m_dspdatatest.m_PrachDblA,"%x",&gdLramDblAddr[0]); 
+//			sscanf(m_dspdatatest.m_PrachDblB,"%x",&gdLramDblAddr[1]);
+
+			//m_dspdatatest.UpdateData(FALSE);
+			//int nValude;
+			//char a[100];      
+			//CString str(”aaaaaa”);       
+			//strncpy(a,(LPCTSTR)str,sizeof(a));
+
+			memset(&gatScheInfoDdrVC[0][0],0,sizeof(gatScheInfoDdrVC));
+			//memset(&gatLramInCellParaBuffer[0][0],0,sizeof(gatLramInCellParaBuffer));
+			memset(&gatLramParamInfoTestDSP[0][0],0,sizeof(gatLramInCellParaBuffer));
+			memset(&gatParamMsgInfoA[0][0][0],0, sizeof(gatParamMsgInfoA));
+			memset(&gatParamMsgInfoB[0][0][0],0, sizeof(gatParamMsgInfoB));
+			ret = SockInit();
+			if(0 == ret)
+			{
+				strprint = "SockInit 初始化失败，请关闭监控，检查网络连接 \r\n\r\n";	
+				UpdateLog(&strprint);
+				break;
+			}
+			else if(1 == ret)
+			{
+				strprint = "SockInit 初始化完成 \r\n\r\n";	
+				UpdateLog(&strprint);
+
+				DspDataClr(&gatScheInfoDdrVC[0][0],m_dspdatatest.m_CCFlg);  //先把空间中的数据清零
+				DspPrachDataClr(&gatLramParamInfoTestDSP[0][0],m_dspdatatest.m_CCFlg);  //先把空间中的数据清零
+				DspPrachMsgClr(&gatParamMsgInfoA[0][0][0],m_dspdatatest.m_CCFlg); 
+				DspPrachMsgClr(&gatParamMsgInfoB[0][0][0],m_dspdatatest.m_CCFlg); 
+
+				bAcFlag = 0;
+			}
+			dLoopCnt = 0;
+
+			if(1 == dRecoverCase0Flg)
+			{
+				cFileTmpPath = m_FilePath_Out.Left(m_FilePath_Out.ReverseFind('\\'))+"\\ScheInfo";
+				m_dspdatatest.m_TestAllFlg = 0;
+				if((0 == m_datareform.m_ReFormAll)&&(0 ==m_datareform.m_TestFileCaseAllFlg))
+				{
+					m_dspdatatest.m_TestFileCaseAllFlg = 0;/* 如果文件夹遍历模式转换完成自动文件夹遍历模式灌数 */
+					
+				}
+			}
+			else
+			{
+				cFileTmpPath = m_dspdatatest.m_FileTileArray[0].Left(m_dspdatatest.m_FileTileArray[0].ReverseFind('\\'));
+			}
+
+			bAcTmpFlag = aCtempFind.FindFile(cFileTmpPath + _T("\\ScheInfoSfnAC*.dat"));
+			if(1 == bAcTmpFlag)
+			{
+				cFilePath_tmp = cFileTmpPath.Left(cFileTmpPath.ReverseFind('\\'));
+				cFilePath_tmp = cFilePath_tmp.Left(cFilePath_tmp.ReverseFind('\\'));
+				if(aCtempFind.FindFile(cFilePath_tmp + _T("\\ACScheInfoSfn*")))
+				{
+					bAcFlag = 1;
+				}
+				else
+				{
+					bAcFlag = 0;
+					return;
+				}
+			}
+
+			if((0 ==m_dspdatatest.m_TestFileCaseAllFlg)&&(0 == m_dspdatatest.m_TestAllFlg))//遍历文件夹开关，命名为FTDATA_Case*
+			{
+				cFilePath_tmp= cFileTmpPath.Left(cFileTmpPath.ReverseFind('\\'));
+				cFilePath_tmp = cFilePath_tmp.Left(cFilePath_tmp.ReverseFind('\\'));
+				if(1 == bAcTmpFlag)
+				{
+					cFilePath_tmp = cFilePath_tmp.Left(cFilePath_tmp.ReverseFind('\\'));
+				}
+				if(FileCaseFind.FindFile(cFilePath_tmp+_T("\\FT_Case*")))
+				{
+					bAllFileFindFlg = 1;
+				}
+				else
+				{
+					bAllFileFindFlg = 0;
+				}
+			}
+			else
+			{
+				bAllFileFindFlg = 0;
+			}
+
+
+
+			bPrachFlag = pRachtempFind.FindFile(cFileTmpPath + _T("\\LramBuffer*.dat"));
+
+			if(1 == bPrachFlag)
+			{
+				m_manuconfig.m_prachtestflg = 1;
+			}
+			 else
+			 {
+				  m_manuconfig.m_prachtestflg = 0;
+			 }
+
+			if(0 == m_dspdatatest.m_TestAllFlg)
+			{
+				if(0 == bAcTmpFlag)
+				{
+					bFound = tempFind.FindFile(cFileTmpPath + _T("\\ScheInfoSfn*.dat"));	
+				}
+				else
+				{
+					bFound = tempFind.FindFile(cFileTmpPath + _T("\\ScheInfoSfnAC*.dat"));	
+				}
+			}
+			else
+			{
+				bFound = 0;
+				bPrachFlag = 0;
+			}
+			
+			dCaseCnt = 0;
+			dCaseOKCnt = 0;
+			dCaseErrCnt = 0;
+			dCaseOverTimeCnt = 0;
+			dCaseAbnormalCnt = 0;
+			dCaseFileIdx = 0;
+			dAcFileCnt = 0;
+			dAcCaseRealCnt = 0;
+			dAcCasePassCnt = 0;
+			dAcCaseAbnormalCnt = 0;
+			dAcCaseFailCnt = 0;
+			dAcCaseOverTimeCnt = 0;
+			//while(m_dspdatatest.m_FileTileArray[dLoopCnt].GetLength() != 0)
+	do
+	{
+		if((0 == bAllFileFindFlg)&&(1 == bAcFlag))
+		{
+		if(0 == m_dspdatatest.m_TestAllFlg)
+		{
+			bAcFlag = aCtempFind.FindNextFile();
+			cFileInPath = aCtempFind.GetFilePath() ;	
+		}
+		else
+		{
+			cFileInPath = m_dspdatatest.m_FileTileArray[0].Left(m_dspdatatest.m_FileTileArray[0].ReverseFind('\\'));
+			cFileInPath = cFileInPath.Left(cFileInPath.ReverseFind('\\'));													
+		}
+		str.Format("\\ScheInfo\\ScheInfoSfnAC*.dat");
+		cFileInPath = cFileInPath + str;
+
+		bFound = tempFind.FindFile(cFileInPath);	
+
+		DspDataClr(&gatScheInfoDdrVC[0][0],m_dspdatatest.m_CCFlg);
+		}
+
+		if((1 == bAllFileFindFlg)&&(0 == m_dspdatatest.m_TestAllFlg))
+		{
+
+			bAcTmpFlag = 0;
+			
+			bAllFileFindFlg = FileCaseFind.FindNextFile();
+			cFileInPath = FileCaseFind.GetFilePath() +"\\ScheInfo";
+				
+			if(aCtempFind.FindFile(FileCaseFind.GetFilePath() + _T("\\ACScheInfoSfn*")) )
+			{
+				bAcFlag = aCtempFind.FindNextFile();
+				cFileInPath = aCtempFind.GetFilePath()+ "\\ScheInfo";
+				bAcTmpFlag = 1;
+			};
+										
+			bFoundLram = pRachtempFind.FindFile(cFileInPath + _T("\\LramBuffer*.dat"));
+			bFoundAC = tempFind.FindFile(cFileInPath + _T("\\ScheInfoSfnAC*.dat"));
+			
+			if(1 == bFoundAC)
+			{
+				DspDataClr(&gatScheInfoDdrVC[0][0],m_dspdatatest.m_CCFlg);
+				bAcTmpFlag = 1;
+				
+			}
+			else
+			{
+				bFoundScheInfo= tempFind.FindFile(cFileInPath + _T("\\ScheInfoSfn*.dat"));	
+			}
+			
+			
+			if((1 == bFoundScheInfo)||(1 == bFoundAC))
+			{
+				bFound = 1;
+			}
+			else
+			{
+				bFound = 0;
+			}
+
+			if(1 == bFoundLram)
+			{
+				bPrachFlag = 1;
+				m_manuconfig.m_prachtestflg = 1;
+			}
+			else
+			{
+				bPrachFlag = 0;
+				m_manuconfig.m_prachtestflg = 0;
+			}		
+		}
+		dEachFileCaseCnt=0;
+		dEachFileCaseOkCnt = 0;
+		dEachFileCaseErrCnt = 0;
+		dEachFileCaseOverTimeCnt = 0;
+		dEachFileCaseAbnormalCnt = 0;
+			while((0 != m_dspdatatest.m_FileTileArray[dLoopCnt].GetLength()) || (1 == bFound) || (1 == bPrachFlag))
+			{
+				gudCaseCnt++;
+				TRACE("Case %d Begin\n",gudCaseCnt);
+				if(0 == m_dspdatatest.m_TestAllFlg)
+				{
+					if(1 == m_manuconfig.m_prachtestflg)
+					{
+							bPrachFlag = pRachtempFind.FindNextFile();
+								// skip . and .. files; otherwise, we'd
+								// recur infinitely!
+							if (pRachtempFind.IsDots() || pRachtempFind.IsDirectory())
+							continue;
+							cFileInPath = pRachtempFind.GetFilePath() ;
+					}
+					else
+					{
+							bFound = tempFind.FindNextFile();
+							// skip . and .. files; otherwise, we'd
+							// recur infinitely!
+							if (tempFind.IsDots() || tempFind.IsDirectory())
+							continue;
+							cFileInPath = tempFind.GetFilePath() ;
+					}				
+				}
+				else
+				{
+					if(0 == bAcTmpFlag)
+					{
+						cFileInPath = m_dspdatatest.m_FileTileArray[dLoopCnt];
+					}
+					else
+					{
+						bFound = tempFind.FindNextFile();
+						// skip . and .. files; otherwise, we'd
+						// recur infinitely!
+						if (tempFind.IsDots() || tempFind.IsDirectory())
+						continue;
+						cFileInPath = tempFind.GetFilePath() ;
+					}
+				}
+				
+							
+				cFileNameExt = cFileInPath.Right(3);
+				dFindPos = cFileInPath.ReverseFind('\\');
+				cFileRootPath = cFileInPath.Left(dFindPos);
+				dFindPos = cFileRootPath.ReverseFind('\\');
+				cFilePath_Out = cFileRootPath.Left(dFindPos);
+				if(1 == m_manuconfig.m_prachtestflg)
+				{
+					cFilePath_Out = cFilePath_Out + "\\Prach_Fmt0_TDD_A" ;
+				}
+				else
+				{
+					cFilePath_Out = cFilePath_Out + "\\ConfigDataSfn" ;
+				}
+				cFilePath_Out = cFilePath_Out + "\\ConfigDataSfn" ;
+				fp = fopen(cFileInPath,"r+b");
+				
+				if(cFileNameExt == "bin")
+				{
+					ReadData(fp,&gatScheInfoDdrDSP[dLoopCnt][0]);  //gatScheInfoDdr
+				}
+				else if(cFileNameExt == "dat")
+				{
+					if(0 == m_manuconfig.m_prachtestflg)
+					{
+						ReadDataDat(fp,&gatScheInfoDdrDSP[dLoopCnt][0]);  //gatScheInfoDdr	
+					}
+					else
+					{
+						RachReadDataDat(fp,&gatLramInCellParaBuffer[dLoopCnt][0]);  //gatScheInfoDdr	
+						fclose(fp);
+   
+              			cFileTmpPath = cFileInPath.Left(cFileInPath.ReverseFind('\\'));
+              			dFindPos = cFileInPath.GetLength() - cFileInPath.ReverseFind('\\') - 1;
+						cFileExt = cFileInPath.Right(dFindPos);
+				
+						cFileTimeExt = cFileExt.Left(cFileExt.ReverseFind('.'));
+              			cFileTmpPath = cFileTmpPath + "\\"+ cFileTimeExt;  
+							  
+						dFindPos =cFileTimeExt.GetLength() - 10;
+						cFileTimeExt = cFileTimeExt.Right(dFindPos);
+	 
+						cFileTmpPath = cFileInPath.Left(cFileInPath.ReverseFind('\\'));
+						cFileTmpPath = cFileTmpPath + "\\ScheInfoSfn" + cFileTimeExt;					
+					
+						cFileTmpPath = cFileTmpPath + "\\ScheInfoSfn" + cFileTimeExt+".dat";
+						fp = fopen(cFileTmpPath,"r+b");
+						ReadDataDat(fp,&gatScheInfoDdrDSP[dLoopCnt][0]);  
+					}
+				}
+				else
+				{
+					strprint = "输入数据类型错误!!\r\n\r\n";
+					UpdateLog(&strprint);
+					//fclose(fp);
+					break;
+				}		
+				fclose(fp);
+               	memset(&gatScheInfoDdrVC[dLoopCnt][0],0,sizeof(T_Cmac2PulmDspCellDemInfo)*MAX_CELL_NUM_ON_BOARD);
+				if(0 == bAcTmpFlag)
+				{
+					DspDataClr(&gatScheInfoDdrVC[dLoopCnt][0],m_dspdatatest.m_CCFlg);  //先把空间中的数据清零
+				}
+				DspPrachDataClr(&gatLramParamInfoTestDSP[dLoopCnt][0],m_dspdatatest.m_CCFlg);  //先把空间中的数据清零
+				DspPrachMsgClr(&gatParamMsgInfoA[dLoopCnt][0][0],m_dspdatatest.m_CCFlg); 
+				DspPrachMsgClr(&gatParamMsgInfoB[dLoopCnt][0][0],m_dspdatatest.m_CCFlg); 
+				
+				if(0 == m_manuconfig.m_prachtestflg)
+				{
+					memcpy(&gatScheInfoDdrVC[dLoopCnt][0],&gatScheInfoDdrDSP[dLoopCnt][0],sizeof(T_Cmac2PulmDspCellDemInfo)*MAX_CELL_NUM_ON_BOARD);
+					for(dCellIdx = 0; dCellIdx < MAX_CELL_NUM_ON_BOARD; dCellIdx++)
+					{
+						ScheInfoBigEndianReverse(&gatScheInfoDdrDSP[dLoopCnt][dCellIdx],&gatScheInfoDdrVC[dLoopCnt][dCellIdx]);
+					}
+				}
+				else
+				{
+					memcpy(&gatScheInfoDdrVC[dLoopCnt][0],&gatScheInfoDdrDSP[dLoopCnt][0],sizeof(T_Cmac2PulmDspCellDemInfo)*MAX_CELL_NUM_ON_BOARD);
+					for(dCellIdx = 0; dCellIdx < MAX_CELL_NUM_ON_BOARD; dCellIdx++)
+					{
+						ScheInfoBigEndianReverse(&gatScheInfoDdrDSP[dLoopCnt][dCellIdx],&gatScheInfoDdrVC[dLoopCnt][dCellIdx]);
+					}
+					if(0 == ((gatLramInCellParaBuffer[dLoopCnt][0].ucCellEn >> 1) & 0x1))//cellmode0
+					{
+						for(dCellIdxDSP = 0; dCellIdxDSP < 3; dCellIdxDSP++)
+						{
+							if(0 == (gatLramInCellParaBuffer[dLoopCnt][dCellIdxDSP].ucCellEn & 0x1))
+
+						{
+							continue;
+						}
+						memcpy(&gatLramParamInfoTestDSP[dLoopCnt][dCellIdxDSP+3],&gatLramInCellParaBuffer[dLoopCnt][dCellIdxDSP],sizeof(T_Cmac2PulmPrachDemInfo));
+						gatLramParamInfoTestDSP[dLoopCnt][dCellIdxDSP+3].ucCellEn = 1;
+					}
+					
+				}
+				else
+				{
+					for(dCellIdxDSP = 0; dCellIdxDSP < 3; dCellIdxDSP++)  //6*4模式
+					{
+						dCellIdx = dCellIdxDSP * 2;
+						if(0 == (gatLramInCellParaBuffer[dLoopCnt][dCellIdx].ucCellEn & 0x1))
+						{
+							continue;
+						}
+						memcpy(&gatLramParamInfoTestDSP[dLoopCnt][dCellIdxDSP],&gatLramInCellParaBuffer[dLoopCnt][dCellIdx],sizeof(T_Cmac2PulmPrachDemInfo));
+						gatLramParamInfoTestDSP[dLoopCnt][dCellIdxDSP].ucCellEn = 1;
+					}
+					//DSPB
+					for(dCellIdxDSP = 0; dCellIdxDSP < 3; dCellIdxDSP++)
+					{
+						dCellIdx = dCellIdxDSP * 2 + 1;
+						if(0 == (gatLramInCellParaBuffer[dLoopCnt][dCellIdx].ucCellEn & 0x1))
+
+						{
+							continue;
+						}
+						memcpy(&gatLramParamInfoTestDSP[dLoopCnt][dCellIdxDSP+3],&gatLramInCellParaBuffer[dLoopCnt][dCellIdx],sizeof(T_Cmac2PulmPrachDemInfo));
+						gatLramParamInfoTestDSP[dLoopCnt][dCellIdxDSP+3].ucCellEn = 1;
+					}
+				}
+			}
+				cFileTmpPath = cFileInPath.Left(cFileInPath.ReverseFind('\\'));
+              	dFindPos = cFileInPath.GetLength() - cFileInPath.ReverseFind('\\') - 1;
+				cFileExt = cFileInPath.Right(dFindPos);
+			
+				cFileTimeExt = cFileExt.Left(cFileExt.ReverseFind('.'));
+                cFileTmpPath = cFileTmpPath + "\\"+ cFileTimeExt;             			
+				SendCheckPackage(0,CHK_COM_REQ,0,m_dspdatatest.m_CCFlg);
+				for(dCellIdx = 0; dCellIdx < MAX_CELL_NUM_ON_BOARD; dCellIdx++)
+				{
+					ptTmpScheInfo = &gatScheInfoDdrVC[dLoopCnt][dCellIdx];
+					if((1 == ptTmpScheInfo->tCellDemInfo.ucCellState) || (2 == ptTmpScheInfo->tCellDemInfo.ucCellState))
+					{
+						if((1 == ptTmpScheInfo->atSrsCellScheInfo[0].ucCellSrsExist) && (0 == ptTmpScheInfo->tCellSymInfo.ucPuschFreUserNum)) //只有SRS
+						{
+							dSrsFlg = 1;
+						}
+						break;
+					}
+				}
+				if(1 == bAcTmpFlag)
+				{
+					dAcFileCnt++;
+					ret = ACDataSendRecvVerify(&cFileTmpPath,&gatScheInfoDdrVC[dLoopCnt][0],&gatScheInfoDdrDSP[dLoopCnt][0],&gatCmac2PulmAntAdjustScheInfoDSP[dLoopCnt][0],m_dspdatatest.m_CCFlg,&cErrorlog);
+				}
+			//	else if(1 == dSrsFlg)
+			//	{
+				//	ret = SrsDataSendRecvVerify(&cFileTmpPath,&gatScheInfoDdrVC[dLoopCnt][0],&gatScheInfoDdrDSP[dLoopCnt][0],m_dspdatatest.m_CCFlg,&cErrorlog);
+			//	}
+				else if(1 == m_manuconfig.m_prachtestflg)
+				{
+					SendCheckPackage(0,CHK_COM_REQ,0,m_dspdatatest.m_CCFlg);
+					ret = RachDataSendRecvVerify(&cFileTmpPath,&cFileTimeExt,&gatScheInfoDdrVC[dLoopCnt][0],&gatScheInfoDdrDSP[dLoopCnt][0],&gatLramInCellParaBuffer[dLoopCnt][0],&gatLramInCellParaBuffer[dLoopCnt][0],m_dspdatatest.m_CCFlg,dLoopCnt);
+				}
+				else
+				{
+					ret = DataSendRecvVerify(&cFileTmpPath,&gatScheInfoDdrVC[dLoopCnt][0],&gatScheInfoDdrDSP[dLoopCnt][0],&gatPuschDecResInfo[0][0],m_dspdatatest.m_CCFlg,&cErrorlog);
+				}
+				if(((1 == gatCmac2PulmAntAdjustScheInfoDSP[dLoopCnt][0].ucActive) && (1 == bAcTmpFlag)) || (0 == bAcTmpFlag) )
+				{
+					dFindPos = cFileInPath.GetLength() - cFileInPath.ReverseFind('\\') - 1;
+					str = cFileInPath.Right(dFindPos);
+					CTime time = CTime::GetCurrentTime(); //获取系统日期
+					cStrTime = time.Format(" %Y-%m-%d  %X  ");
+               		dFindPos = cFileInPath.ReverseFind('\\');
+					cFileRootPath = cFileInPath.Left(dFindPos);
+					if(1 == bAcTmpFlag)
+					{
+					//	cFileRootPath = m_dspdatatest.m_FileTileArray[0].Left(m_dspdatatest.m_FileTileArray[0].ReverseFind('\\'));
+						cFileRootPath = cFileInPath.Left(cFileInPath.ReverseFind('\\'));
+						cFileRootPath = cFileRootPath.Left(cFileRootPath.ReverseFind('\\'));
+						cFileBackPath = cFileRootPath.Left(cFileRootPath.ReverseFind('\\'));
+						cFileBackPath = cFileBackPath + "\\FailScheInfo";					
+					}
+					else
+					{
+	                 			  cFileBackPath = cFileRootPath.Left(cFileRootPath.ReverseFind('\\'));
+					}
+					if(0 == m_manuconfig.m_prachtestflg)
+
+					{
+						cStrTime = cStrTime + cFileTmpPath;
+        				if(0xFFFFFFFF == ret)
+        				{
+        					cStrTime = cStrTime + "   Pass \n";
+						    dCaseOKCnt++;
+						dEachFileCaseOkCnt++;
+						if(1 == bAcTmpFlag)
+						{
+							dAcCasePassCnt++;//3
+						}
+                          		       DelCaseBack(cFileBackPath,cFileInPath);
+        				}
+					else if(0xFFFFFFFE == ret)
+					{
+						/* 其他都比对正确，只有超时场景 */
+
+        					cStrTime = cStrTime+"    OverTime:"+cErrorlog+" \n";
+						    dCaseOverTimeCnt++;
+						dEachFileCaseOverTimeCnt++;
+						if(1 == bAcTmpFlag)
+						{
+							dAcCaseOverTimeCnt++;//3
+						}
+					       if(1 == bAcTmpFlag)
+						{
+								DirectoryCopyAll(cFileRootPath,cFileBackPath);
+						}
+						else
+						{
+								TestCaseBack(cFileBackPath,cFileInPath,"OverTimeScheInfo");
+						}
+					}
+        				else if(0 == ret)
+        				{
+                            cStrTime = cStrTime + "   test error \n";
+                            dCaseAbnormalCnt++;
+						dEachFileCaseAbnormalCnt++;
+						if(1 == bAcTmpFlag)
+						{
+							dAcCaseAbnormalCnt++;//3
+						}
+                            TestCaseBack(cFileBackPath,cFileInPath,"TestErrScheInfo");
+        				}
+        				else
+        				{
+        				    str.Format("   Fail   %d \n",ret);
+
+        					cStrTime = cStrTime+cErrorlog+str;//fail
+        					dCaseErrCnt++;
+						dEachFileCaseErrCnt++;
+						if(1 == bAcTmpFlag)
+						{
+							dAcCaseFailCnt++;//3
+						}
+					
+							if(1 == bAcTmpFlag)
+							{
+								DirectoryCopyAll(cFileRootPath,cFileBackPath);
+							}
+							else
+							{
+								TestCaseBack(cFileBackPath,cFileInPath,"FailScheInfo");
+							}
+        				}
+					}
+					else
+					{
+						cStrTime = cStrTime + str;
+						if(0xFFFFFFFF == ret)
+						{
+							cStrTime = cStrTime + "   Pass \n";
+							dCaseOKCnt++;
+							dEachFileCaseOkCnt++;
+
+						}
+						else if(0 == ret)
+						{
+							cStrTime = cStrTime + " test error \n";
+						       dCaseAbnormalCnt++;
+							   TestCaseBack(cFileBackPath,cFileInPath,"TestErrScheInfo"); 
+							dEachFileCaseAbnormalCnt++;
+						}
+						else
+						{
+							str.Format("   Fail  **UeNumErr %d  PidErr %d  Ps Err %d  TaErr %d  SnrErr  %d  CellNi  %d** \n\n", 
+								gdRet[0],gdRet[1],gdRet[2],gdRet[3],gdRet[4], gdRet[5]);
+							cStrTime = cStrTime + str;//"   Fail \n\n";
+							TestCaseBack(cFileBackPath,cFileInPath,"FailScheInfo");
+							dCaseErrCnt++;
+							dEachFileCaseErrCnt++;
+
+						}
+					}
+
+				dFindPos = cFileInPath.ReverseFind('\\');
+				cFileRootPath = cFileInPath.Left(dFindPos);
+				if(1 == bAcTmpFlag)
+				{
+					cFileRootPath = m_dspdatatest.m_FileTileArray[0].Left(m_dspdatatest.m_FileTileArray[0].ReverseFind('\\'));
+					cFileRootPath = cFileRootPath.Left(cFileRootPath.ReverseFind('\\'));
+					cFileRootPath = cFileRootPath.Left(cFileRootPath.ReverseFind('\\'));
+					dAcCaseRealCnt++;//3//3个文件是一个CASE,遍历文件夹时用来说明AC的实际用例数
+				}
+				str = cFileRootPath + "\\Log.txt";
+				fp = fopen(str,"a");
+				if(fp!=NULL)
+				{
+					fprintf(fp,"%s",cStrTime);
+					fclose(fp);
+				}
+				
+				strprint = cStrTime + "\r\n";
+				UpdateLog(&strprint);
+				}
+				dLoopCnt++;
+				dLoopCnt = dLoopCnt % 100;
+				dCaseCnt++;
+				dEachFileCaseCnt++;
+				TRACE("Case %d End\n",gudCaseCnt);
+			}
+			if((1 == bAcFlag) && (0 == bFound) &&  (0 != m_dspdatatest.m_TestAllFlg))
+			{
+				bAcFlag = 0;
+			}
+			if((0 == m_dspdatatest.m_TestFileCaseAllFlg)&&(0 == m_dspdatatest.m_TestAllFlg)
+				&&((0 == bAcTmpFlag)||((1 ==bAcTmpFlag )&&(0 == bAcFlag))))
+			{
+				str = cFileRootPath + "\\Log.txt";
+				fp = fopen(str,"a");
+
+
+				if((1 ==bAcTmpFlag )&&(0 == bAcFlag))
+				{
+					cFileBackPath = cFileBackPath.Left(cFileBackPath.ReverseFind('\\'));//yy add
+					dFindPos = cFileBackPath.ReverseFind('\\');
+					cFileNameOrig = cFileBackPath.Right(cFileBackPath.GetLength()-1-dFindPos);
+	                       
+					
+					strprint.Format ( "%s  测试完成:\r\n",cFileNameOrig);
+					strprint2.Format("  AC 用例总数:%d  ,Pass:%d 组,FAIL:%d 组,Abnormal:%d 组,OverTime:%d组,\r\n",dAcCaseRealCnt,dAcCasePassCnt,dAcCaseFailCnt,dAcCaseAbnormalCnt,dAcCaseOverTimeCnt);
+				}
+				else
+				{
+					dFindPos = cFileBackPath.ReverseFind('\\');//yy add
+					cFileNameOrig = cFileBackPath.Right(cFileBackPath.GetLength()-1-dFindPos);
+	                       
+					
+					strprint.Format ( "%s  测试完成:\r\n",cFileNameOrig);
+					strprint2.Format("   用例总数:%d  ,Pass:%d 组,FAIL:%d 组,Abnormal:%d 组,OverTime:%d组,\r\n",dEachFileCaseCnt,dEachFileCaseOkCnt,dEachFileCaseErrCnt,dEachFileCaseAbnormalCnt,dEachFileCaseOverTimeCnt);
+				}
+				strprint+=strprint2;
+				if(fp!=NULL)
+				{
+						fprintf(fp,"%s",strprint);
+						
+						fclose(fp);
+				}
+
+				UpdateLog(&strprint);
+			}
+
+			if(0==bAcTmpFlag)
+			{
+				dCaseFileIdx++;
+			}
+			else if((1 ==bAcTmpFlag )&&(0 == bAcFlag))
+			{
+				dCaseFileIdx++;
+
+			}
+		}while((1 == bAcFlag)||(1 == bAllFileFindFlg));
+		//	if(1 == bAcTmpFlag)
+		//	{
+		//		dCaseCnt = dCaseOKCnt + dCaseErrCnt + dCaseAbnormalCnt;
+		//	}
+			dCaseCnt = dCaseCnt -dAcFileCnt +dAcCaseRealCnt;
+			m_GenConfigFlg = 0;
+			m_GendatFlg = 0;
+			m_GenbinFlg = 0;  //数据转换时不生成配置文件
+			m_GenExelFlg = 0;
+			dDataReady = 1;
+			
+			str = cFileRootPath + "\\Log.txt";
+			fp = fopen(str,"a");
+			strprint = "所有用例集测试完成:\n";
+
+			strprint2.Format("   遍历FT_Case*文件夹%d 个，用例总数:%d  ,Pass:%d 组,FAIL:%d 组,Abnormal:%d 组,OverTime:%d组,\r\n",dCaseFileIdx,dCaseCnt,dCaseOKCnt,dCaseErrCnt,dCaseAbnormalCnt,dCaseOverTimeCnt);
+
+			strprint+=strprint2;
+			if(fp!=NULL)
+			{
+					fprintf(fp,"%s",strprint);
+					
+					fclose(fp);
+			}
+			UpdateLog(&strprint);
+			closesocket(gudSock);
+			break;
+		}
+	}
+
+	if(1 == m_GenConfigFlg)
+	{
+		DestroyMcrAndLib(); //销毁Matlab动态链接库
+	}
+	
+	if((1 == m_GenbinFlg) && (1 == dDataReady))
+	{	
+		dFileCnt = 0;
+		for(dSubFrmIdx = 0;dSubFrmIdx < dLoopCnt; dSubFrmIdx++)
+		{
+			if(0 != adCellNum[dSubFrmIdx])
+			{
+				for(dCellIdx = 0; dCellIdx < MAX_CELL_NUM_ON_BOARD; dCellIdx++)
+				{
+					if((1 == gatScheInfoDdrVC[dSubFrmIdx][dCellIdx].tCellDemInfo.ucCellState)
+						|| (2 == gatScheInfoDdrVC[dSubFrmIdx][dCellIdx].tCellDemInfo.ucCellState))
+						wSfnSubFrm = gatScheInfoDdrVC[dSubFrmIdx][dCellIdx].tCellDemInfo.wSfnSubFrm;
+				}			
+				str.Format("%d", wSfnSubFrm);
+				cFilePath_Out = m_FilePath_Out.Left(m_FilePath_Out.ReverseFind('\\'));
+				cFilePath_Out = cFilePath_Out + "\\ScheInfo\\";
+				if(CreateDirectory(cFilePath_Out, NULL) )
+				{
+					CreateDirectory(cFilePath_Out, NULL);
+				}
+				cFilePath_Out = cFilePath_Out + "ScheInfoSfn" + str;
+				cFilePath_Out = cFilePath_Out + ".bin";
+
+				fp = fopen(cFilePath_Out,"w");
+				PrintBin(fp,&gatScheInfoDdrDSP[dSubFrmIdx][0]);
+				fclose(fp);
+				dFileCnt ++;
+			}
+		}
+		//MessageBox("ScheInfo.dat完成");   
+		str.Format("%d",dFileCnt); 		
+		strprint = "生成ScheInfo.bin文件";
+		strprint = strprint + str + "个\r\n\r\n";
+			
+		UpdateData(TRUE);
+		m_Progress = m_Progress + strprint;
+		UpdateData(FALSE); 
+	}
+
+	if(0 == dDataReady)
+	{
+		strprint = "输入错误!!\r\n";
+		
+		UpdateLog(&strprint);	
+
+	}
+
+	strprint = "处理完成!!\r\n";
+	UpdateLog(&strprint);
+
+	//CDialog::OnOK();
+}
+
+void CGenScheInfoTestDlg::OnButtonoutput() 
+{
+	// TODO: Add your control notification handler code here
+	char  cFilePath_Out[1000];
+	
+	UpdateData(TRUE); 
+    GetModuleFileName(NULL,cFilePath_Out,1000);
+    CFileDialog  filedlg(TRUE,NULL,NULL,OFN_HIDEREADONLY | OFN_OVERWRITEPROMPT,"数据文件(*.dat *.bin)|*.dat;*.bin");
+  //  filedlg.m_ofn.lpstrInitialDir=cFilePath_Out;
+    if(IDOK==filedlg.DoModal())
+    {
+        m_FilePath_Out=filedlg.GetPathName();
+        UpdateData(FALSE);
+    }
+}
+
+void CGenScheInfoTestDlg::OnGenexel() 
+{
+	// TODO: Add your control notification handler code here
+	m_GenExelFlg = 1;
+}
+
+
+
