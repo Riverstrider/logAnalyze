@@ -1,0 +1,132 @@
+clear all
+close all
+clc
+
+%%%%%%%%%%%%%%%%%%%%%%%% 生成浮点输入数据开始 %%%%%%%%%%%%%%%%%%%%%%%%
+j = sqrt(-1);
+N = 64;
+a = 0:N-1;
+% x = 1/64*cos(2*pi/2*a);
+x=sin(2*pi/3*a)+sin(2*pi/4*a)+j*sin(2*pi/5*a)+sin(2*pi/6*a)+j*cos(2*pi/7*a);
+x = x/max(x);
+xbak = x;
+subplot(2,2,1),plot(abs(x));
+title('输入信号时域波形'); 
+y = fft(x,N);
+subplot(2,2,2),plot(abs(y)); 
+title('系统浮点FFT计算出的频谱');
+%%%%%%%%%%%%%%%%%%%%%%%% 生成浮点输入数据结束 %%%%%%%%%%%%%%%%%%%%%%%%
+
+
+%%%%%%%%%%%%%%%%%%%%%%%% 生成定点旋转因子开始 %%%%%%%%%%%%%%%%%%%%%%%%
+Wn = exp(-j*2*pi/N);
+WnTab = zeros(1,64);
+for i = 1:N
+    WnTab(i) = Wn^(i-1);
+end
+WnTabQ15 = round(WnTab.*32767);
+WnReal = real(WnTabQ15);
+WnImag = imag(WnTabQ15);
+for i = 1:64
+    if WnReal(i)<0
+        WnReal(i) = WnReal(i) + 65536;
+    end
+    if WnImag(i)<0
+        WnImag(i) = WnImag(i) + 65536;
+    end
+end
+WnRealHex = dec2hex(WnReal);
+WnImagHex = dec2hex(WnImag);
+%%%%%%%%%%%%%%%%%%%%%%%% 生成定点旋转因子结束 %%%%%%%%%%%%%%%%%%%%%%%%
+
+
+%%%%%%%%%%%%%%%%%%%%%%%% 生成定点输入数据开始 %%%%%%%%%%%%%%%%%%%%%%%%
+x = floor(x.*(2^10-1)); %Q10
+xbakInt = x;
+yInt = fft(xbakInt,64);
+yIntFloor = floor(yInt);
+subplot(2,2,4),plot(abs(yInt)); 
+title('系统定点FFT计算出的频谱'); 
+
+xbakReal = real(xbakInt);
+xbakImag = imag(xbakInt);
+dataIn = zeros(1,128);
+dataIn(1:2:128) = xbakReal;
+dataIn(2:2:128) = xbakImag;
+fid = fopen('dataIn.txt','wt+');
+fprintf(fid,'%d,',dataIn);
+fclose(fid);
+%%%%%%%%%%%%%%%%%%%%%%%% 生成定点输入数据结束 %%%%%%%%%%%%%%%%%%%%%%%%
+
+%%%%%%%%%%%%%%%%%%%%%%%% 定点FFT开始 %%%%%%%%%%%%%%%%%%%%%%%%
+L = log(N)/log(4);
+temp = zeros(1,N);
+GroupCnt = 1;
+numberEachGroup = N/4;
+for i = 1:L
+    for g = 1:GroupCnt
+        for n = 1:numberEachGroup
+            k = n + (g-1)*4*numberEachGroup;
+            k1 = k;
+            k2 = k + numberEachGroup;
+            k3 = k + 2*numberEachGroup;
+            k4 = k + 3*numberEachGroup;
+            B0 = x(k1);
+            B1 = x(k2);
+            B2 = x(k3);
+            B3 = x(k4);
+            %T0 = Wn^(GroupCnt*(n-1));
+            %T1 = Wn^(GroupCnt*(n-1)*2);
+            %T2 = Wn^(GroupCnt*(n-1)*3);
+            T0 = WnTabQ15(GroupCnt*(n-1)+1);
+            T1 = WnTabQ15(GroupCnt*(n-1)*2+1);
+            T2 = WnTabQ15(GroupCnt*(n-1)*3+1);
+            Z0 = x(k1) + x(k2) + x(k3) + x(k4);
+            Z1 = x(k1) - j*x(k2) - x(k3) + j*x(k4);
+            Z2 = x(k1) - x(k2) + x(k3) - x(k4);
+            Z3 = x(k1) + j*x(k2) - x(k3) - j*x(k4);
+            temp(k1) = floor(Z0*32767/32768);
+            temp(k2) = floor(T0*Z1/32768);
+            temp(k3) = floor(T1*Z2/32768);
+            temp(k4) = floor(T2*Z3/32768);
+        end
+    end
+    GroupCnt = GroupCnt*4;
+    numberEachGroup = numberEachGroup/4;
+    x = temp;
+end
+
+InDataIdx = [1,17,33,49, 5,21,37,53, 9,25,41,57,  13,29,45,61, ...
+             2,18,34,50, 6,22,38,54, 10,26,42,58, 14,30,46,62, ...
+             3,19,35,51, 7,23,39,55, 11,27,43,59, 15,31,47,63, ...
+             4,20,36,52, 8,24,40,56, 12,28,44,60, 16,32,48,64];
+dataout = zeros(1,N);         
+ for i = 1:N
+    dataout(InDataIdx(i)) = x(i);
+ end
+fid = fopen('dataOut_matlab.txt','wt+');
+for i = 1:64
+    fprintf(fid,'%d %d\n',real(dataout(i)),imag(dataout(i)));
+end
+fclose(fid);
+subplot(2,2,3),plot(abs(dataout)); 
+title('自定义定点FFT计算出的频谱'); 
+%%%%%%%%%%%%%%%%%%%%%%%% 定点FFT结束 %%%%%%%%%%%%%%%%%%%%%%%%
+
+flag =0;
+diff = yIntFloor - dataout;
+if yIntFloor == dataout
+    flag =1;
+end
+
+diff1= zeros(1,64);
+for i = 1:64
+    diff1(i) = (abs(yIntFloor(i)) - abs(dataout(i)))/abs(yIntFloor(i));
+end
+figure;
+plot(10*log10(abs(diff1)));
+title('定点FFT和浮点FFT量化误差dBm'); 
+
+
+
+
