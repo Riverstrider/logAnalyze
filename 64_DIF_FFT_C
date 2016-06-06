@@ -1,0 +1,1338 @@
+#include <math.h>
+#include <stdio.h>
+#include <string.h>
+
+#define XC_WIDTH            8 //two units
+#define SZF_DW              4
+//#define NULL            0 //two units
+///////////////////////////数据类型///////////////////////////
+typedef  int   Word32;
+typedef  int   int32;
+typedef  short Word16;
+typedef  short int16;
+typedef  unsigned short uint16;
+typedef  unsigned short UWord16;
+typedef  unsigned int UWord32;
+typedef  UWord32 uint32;
+typedef __int64 acc_t40;
+typedef acc_t40 aint;
+
+typedef struct  {
+	Word16 re;
+	Word16 im;
+} cint16;
+
+typedef struct  {
+    Word32 re;
+    Word32 im;
+} cint32;
+
+typedef struct  {
+	aint re;
+	aint im;
+} acint;
+///////////////////////////数据类型end////////////////////////
+
+///////////////////////////声明end////////////////////////
+static const int digit_rev_indx_256[256];
+static const int16 twi_table_ln_512 [2*512];
+static const int16 twi_table_ln_256 [2*256];
+const int16 CEVA_DSP_LIB_DFT_384_TWI_TABLE[1002];
+static const short twi_table_ln_1024 [2*1024];
+const short TAB_DFT_TWI_1536_INT16[3568];
+
+///////////////////////////声明end////////////////////////
+
+/*========================== ceva_dsp_lib_dft_basic_op.c ===================================================================*/
+// Real math
+#ifndef MAX_32
+#define MAX_32 (int32)0x7fffffffL
+#endif
+#ifndef MIN_32
+#define MIN_32 (int32)0x80000000L
+#endif
+
+#ifndef MAX_16
+#define MAX_16 (int16)+32767	/* 0x7fff */
+#endif
+#ifndef MIN_16
+#define MIN_16 (int16)-32768	/* 0x8000 */
+#endif
+
+#define LW_SIGN (long)0x80000000        // sign bit
+#define LW_MIN (long)0x80000000
+#define LW_MAX (long)0x7fffffff
+
+#define SW_SIGN (short)0x8000           // sign bit for int16 type
+#define SW_MIN (short)0x8000
+#define SW_MAX (short)0x7fff
+
+
+int psv=1;
+int arnd=0;
+
+int16 saturate(int32 L_var1)
+{
+    int16 swOut;
+
+    if (L_var1 > SW_MAX)
+		{ swOut = SW_MAX; }
+	else if (L_var1 < SW_MIN)
+		{ swOut = SW_MIN; }
+	else { swOut = (int16) L_var1; }		/* automatic type conversion */
+
+    return (swOut);
+}
+
+
+int16 add_sat (int16 var1, int16 var2)
+{
+	  int32 L_sum;
+	  int16 swOut;
+
+	  L_sum = (int32)var1 + var2;
+	  swOut = saturate(L_sum);
+
+	  return (swOut);
+	}
+
+int16 sub_sat (int16 var1, int16 var2)
+        {
+	  int32 L_sum;
+	  int16 swOut;
+
+	  L_sum = (int32)var1 - var2;
+	  swOut = saturate(L_sum);
+
+	  return (swOut);
+	}
+
+#if 0
+int32 L_deposit_h (int16 var1)
+{
+	int32 L_var2;
+	L_var2 = (int32) var1 << 16;
+
+	return (L_var2);
+}
+#endif
+
+int32 L_add_sat (int32 x, int32 y)
+{
+    int32 L_var_out;
+
+    L_var_out =x + y;
+
+    if (((x ^ y) & MIN_32) == 0)
+    {
+        if ((L_var_out ^ x) & MIN_32)
+        {
+            L_var_out = (x < 0) ? MIN_32 : MAX_32;
+        }
+    }
+    return (L_var_out);
+}
+
+int32 L_sub_sat (int32 x, int32 y)
+{
+    int32 L_var_out;
+
+    L_var_out = x - y;
+
+    if (((x ^ y) & MIN_32) != 0)
+    {
+        if ((L_var_out ^ x) & MIN_32)
+        {
+            L_var_out = (x < 0L) ? MIN_32 : MAX_32;
+        }
+    }
+    return (L_var_out);
+}
+
+int16 Extract_h (int32 x)
+{
+	return (int16)(x>>16);
+}
+#if 0
+int16 add (int16 x, int16 y)
+{
+	int16 r;
+	r = x+y;
+	return r;
+}
+
+int16 sub (int16 x, int16 y)
+{
+	int16 r;
+	r = x-y;
+	return r;
+}
+
+
+int32 L_mult (int16 x, int16 y)
+{
+	int32 r;
+	r = x*y;
+	return r;
+}
+
+int32 L_add (int32 x, int32 y)
+{
+	int32 r;
+	r = x+y;
+	return r;
+}
+
+
+
+int32 L_sub (int32 x, int32 y)
+{
+	int32 r;
+	r = x-y;
+	return r;
+}
+
+
+int32 L_mac (int32 a, int16 x, int16 y)
+{
+	int32 r;
+	r = L_add(a,L_mult(x,y));
+	return r;
+}
+
+int32 L_msu (int32 a, int16 x, int16 y)
+{
+	int32 r;
+	r = L_sub(a,L_mult(x,y));
+	return r;
+}
+
+int32 L_shr (int32 x, uint16 sv)
+{
+	int32 r;
+	r = x>>sv;
+	return r;
+}
+#endif
+
+int16 Extract_l (int32 x)
+{
+    return ((int16) x);
+}
+
+int16 abs_s_sat (int16 var1)
+{
+    int16 var_out;
+
+    if (var1 == MIN_16)
+    {
+        var_out = MAX_16;
+    }
+    else
+    {
+        if (var1 < 0)
+        {
+            var_out = (int16)-var1;
+        }
+        else
+        {
+            var_out = var1;
+        }
+    }
+
+    return (var_out);
+}
+
+int32 L_mpy_sat (int16 var1, int16 var2)
+{
+    int32 L_var_out;
+
+    L_var_out = (int32) var1 *(int32) var2;
+
+    if (L_var_out != (int32) 0x40000000L)
+    {
+        if (psv>0)//left shift
+			L_var_out = L_var_out<<psv;
+		else//right shift
+			L_var_out = L_var_out>>(-psv);
+    }
+    else
+    {
+        L_var_out = MAX_32;
+    }
+
+    return (L_var_out);
+}
+
+int16 Round_sat (int32 x)
+{
+    int32 X_rounded;
+
+	X_rounded = L_add_sat (x, (int32) 0x00008000L);
+	return (Extract_h (X_rounded));
+}
+
+
+
+int32 L_shl_sat (int32 L_var1, int16 var2);
+int32 L_shr_sat (int32 L_var1, int16 var2);
+
+int32 L_shl_sat (int32 L_var1, int16 var2)
+{
+    int32 L_var_out = 0L;
+
+    if (var2 <= 0)
+    {
+        if (var2 < -32)
+            var2 = -32;
+        L_var_out = L_shr_sat (L_var1, (int16)-var2);
+    }
+    else
+    {
+        for (; var2 > 0; var2--)
+        {
+            if (L_var1 > (int32) 0X3fffffffL)
+            {
+                L_var_out = MAX_32;
+                break;
+            }
+            else
+            {
+                if (L_var1 < (int32) 0xc0000000L)
+                {
+                    L_var_out = MIN_32;
+                    break;
+                }
+            }
+            L_var1 *= 2;
+            L_var_out = L_var1;
+        }
+    }
+    return (L_var_out);
+}
+
+int32 L_shr_sat (int32 L_var1, int16 var2)
+{
+    int32 L_var_out;
+
+    if (var2 < 0)
+    {
+        if (var2 < -32)
+            var2 = -32;
+        L_var_out = L_shl_sat (L_var1, (int16)-var2);
+    }
+    else
+    {
+        if (var2 >= 31)
+        {
+            L_var_out = (L_var1 < 0L) ? -1 : 0;
+        }
+        else
+        {
+            if (L_var1 < 0)
+            {
+                L_var_out = ~((~L_var1) >> var2);
+            }
+            else
+            {
+                L_var_out = L_var1 >> var2;
+            }
+        }
+    }
+    return (L_var_out);
+}
+
+int16 Norma_L (int32 L_var1)
+{
+    int16 var_out;
+
+    if (L_var1 == 0)
+    {
+        var_out = 0;
+    }
+    else
+    {
+        if (L_var1 == (int32) 0xffffffffL)
+        {
+            var_out = 31;
+        }
+        else
+        {
+            if (L_var1 < 0)
+            {
+                L_var1 = ~L_var1;
+            }
+            for (var_out = 0; L_var1 < (int32) 0x40000000L; var_out++)
+            {
+                L_var1 <<= 1;
+            }
+        }
+    }
+    return (var_out);
+}
+
+
+
+int32 L_mac_sat (int32 a, int16 x, int16 y)
+{
+	int32 r;
+	r = L_add_sat(a,L_mpy_sat(x,y));
+	return r;
+}
+
+cint16 cExtract_h (cint32 x)
+{
+	cint16 r;
+	r.re = (int16)(x.re>>16);
+	r.im = (int16)(x.im>>16);
+	return r;
+}
+
+cint16 cExtract_h_r (cint32 x)
+{
+	cint16 r;
+	x.re  =  L_add_sat (x.re, (int32) 0x00008000L);
+	x.im  =  L_add_sat (x.im, (int32) 0x00008000L);
+
+	r.re = (int16)(x.re>>16);
+	r.im = (int16)(x.im>>16);
+	return r;
+}
+
+cint32 cL_mpy_sat (cint16 x, cint16 y)
+{
+	cint32 acc;
+	acc_t40 acc_re, acc_im;
+	int32 p0, p1;
+
+	// real part
+	p0 = L_mpy_sat(x.re,y.re);
+	p1 = L_mpy_sat(x.im,y.im);
+
+	acc_re = (acc_t40)p0 - (acc_t40)p1 + (acc_t40)arnd;
+
+	if (acc_re > MAX_32)
+		acc_re = MAX_32;
+
+	if (acc_re < MIN_32)
+		acc_re = MIN_32;
+
+
+	// imaginary part
+	p0 = L_mpy_sat(x.re,y.im);
+	p1 = L_mpy_sat(x.im,y.re);
+
+	acc_im = (acc_t40)p0 + (acc_t40)p1 + (acc_t40)arnd;
+
+	if (acc_im > MAX_32)
+		acc_im = MAX_32;
+
+	if (acc_im < MIN_32)
+		acc_im = MIN_32;
+
+	//return value
+	acc.re = (int32)acc_re;
+	acc.im = (int32)acc_im;
+
+
+	return acc;
+}
+
+cint32 cL_mac_sat (cint32 a, cint16 x, cint16 y)
+{
+	cint32 acc;
+	acc_t40 acc_re, acc_im;
+	int32 p0, p1;
+
+	// real part
+	acc_re = (acc_t40)a.re + (acc_t40)arnd;
+
+	p0 = L_mpy_sat(x.re,y.re);
+	p1 = L_mpy_sat(x.im,y.im);
+
+	acc_re = acc_re + (acc_t40)p0 - (acc_t40)p1;
+
+	if (acc_re > MAX_32)
+		acc_re = MAX_32;
+
+	if (acc_re < MIN_32)
+		acc_re = MIN_32;
+
+
+	// imaginary part
+	acc_im = (acc_t40)a.im + (acc_t40)arnd;
+
+	p0 = L_mpy_sat(x.re,y.im);
+	p1 = L_mpy_sat(x.im,y.re);
+
+	acc_im = acc_im + (acc_t40)p0 + (acc_t40)p1;
+
+	if (acc_im > MAX_32)
+		acc_im = MAX_32;
+
+	if (acc_im < MIN_32)
+		acc_im = MIN_32;
+
+	//return value
+	acc.re = (int32)acc_re;
+	acc.im = (int32)acc_im;
+
+
+	return acc;
+
+}
+
+cint32 cL_msu_sat (cint32 a, cint16 x, cint16 y)
+{
+	cint32 acc;
+	acc_t40 acc_re, acc_im;
+	int32 p0, p1;
+
+	// real part
+	acc_re = (acc_t40)a.re + (acc_t40)arnd;
+
+	p0 = L_mpy_sat(x.re,y.re);
+	p1 = L_mpy_sat(x.im,y.im);
+
+	acc_re = acc_re - ( (acc_t40)p0 - (acc_t40)p1 );
+
+	if (acc_re > MAX_32)
+		acc_re = MAX_32;
+
+	if (acc_re < MIN_32)
+		acc_re = MIN_32;
+
+
+	// imaginary part
+	acc_im = (acc_t40)a.im + (acc_t40)arnd;
+
+	p0 = L_mpy_sat(x.re,y.im);
+	p1 = L_mpy_sat(x.im,y.re);
+
+	acc_im = acc_im - ( (acc_t40)p0 + (acc_t40)p1 );
+
+	if (acc_im > MAX_32)
+		acc_im = MAX_32;
+
+	if (acc_im < MIN_32)
+		acc_im = MIN_32;
+
+	//return value
+	acc.re = (int32)acc_re;
+	acc.im = (int32)acc_im;
+
+
+	return acc;
+
+}
+
+int32 L_msu_sat (int32 a, int16 x, int16 y)
+{
+	int32 r;
+	r = L_sub_sat(a,L_mpy_sat(x,y));
+	return r;
+}
+#if 0
+int32 L_deposit_l(int16 var1)
+{
+	  int32 L_Out;
+	  L_Out = var1;
+
+	  return (L_Out);
+}
+#endif
+/*========================== end of ceva_dsp_lib_dft_basic_op.c ===================================================================*/
+/*========================== 256 ===================================================================*/
+Word16 add_sat16(Word16 var1, Word16 var2){
+
+	Word32 L_sum;
+	Word16 swOut;
+
+	L_sum = (Word32) var1 + var2;
+	swOut = saturate(L_sum);
+
+	return (swOut);
+}
+
+cint16 cadd_sat16 (cint16 x, cint16 y)
+{
+	cint16 r;
+	r.re = add_sat16(x.re,y.re);
+	r.im = add_sat16(x.im,y.im);
+	return r;
+}
+
+Word16 sub_sat16(Word16 var1, Word16 var2){
+
+	Word32 L_diff;
+	Word16 swOut;
+
+	L_diff = (Word32) var1 - var2;
+	swOut = saturate(L_diff);
+
+	return (swOut);
+}
+
+cint16 csub_sat16 (cint16 x, cint16 y)
+{
+	cint16 r;
+	r.re = sub_sat16(x.re,y.re);
+	r.im = sub_sat16(x.im,y.im);
+	return r;
+}
+
+cint16 cswas_pm_sat16 (cint16 x, cint16 y)
+{
+	cint16 r;
+	r.re = add_sat16(x.re,y.im);
+	r.im = sub_sat16(x.im,y.re);
+	return r;
+}
+
+cint16 cswas_mp_sat16 (cint16 x, cint16 y)
+{
+	cint16 r;
+	r.re = sub_sat16(x.re,y.im);
+	r.im = add_sat16(x.im,y.re);
+	return r;
+}
+
+aint aSaturate32 (aint x){
+
+	aint r, t;
+
+	r=x;
+	if (r>0x7FFFFFFF)
+		r=0x7FFFFFFF;
+	t=0xFFFFFFFF80000000;
+	if (r<t)
+		r=t;
+
+	return r;
+}
+
+aint aL_mult_sat32 (int16 x, int16 y, int sv)
+{
+	aint r;
+
+	if (sv<0)
+		r = (x*y)>>(-sv);
+	else
+		r = (x*y)<<sv;
+
+
+	r = aSaturate32 (r);
+
+	return r;
+}
+
+acint acL_mpy_sat32 (cint16 x, cint16 y, int32 rnd, int sv)
+{
+	acint r;
+	aint p0, p1;
+
+	r.re = (aint)rnd;
+	p0  = aL_mult_sat32(x.re, y.re, sv);
+	p1  = aL_mult_sat32(x.im, y.im, sv);
+
+	r.re += p0;
+	r.re -= p1;
+	r.re = aSaturate32(r.re);
+
+	r.im = (aint)rnd;
+	p0  = aL_mult_sat32(x.re, y.im, sv);
+	p1  = aL_mult_sat32(x.im, y.re, sv);
+
+	r.im += p0;
+	r.im += p1;
+
+	r.im = aSaturate32(r.im);
+
+	return r;
+}
+
+acint acL_mpy_conj_sat32 (cint16 x, cint16 y, int32 rnd, int sv)
+{
+	acint r;
+	aint p0, p1;
+
+	r.re = (aint)rnd;
+	p0  = aL_mult_sat32(x.re, y.re, sv);
+	p1  = aL_mult_sat32(x.im, y.im, sv);
+
+	r.re += p0;
+	r.re += p1;
+	r.re = aSaturate32(r.re);
+
+	r.im = (aint)rnd;
+	p0  = aL_mult_sat32(x.re, y.im, sv);
+	p1  = aL_mult_sat32(x.im, y.re, sv);
+
+	r.im -= p0;
+	r.im += p1;
+
+	r.im = aSaturate32(r.im);
+
+
+
+	return r;
+}
+
+cint16 acExtract_h (acint x)
+{
+	cint16 r;
+	r.re = (Word16)(x.re>>16);
+	r.im = (Word16)(x.im>>16);
+	return r;
+}
+///////////////////////////内部函数end////////////////////////
+
+static void radix4_kernel(short *in_buffer, short *out_buffer, short *twi_table, int no_mult, int ps, char cFlag)
+{
+	cint16 *p_in_buffer, *p_out_buffer, *p_twi;
+	cint16 x[4], z[4], c1;
+	int    p0, sv, vrnd;
+
+
+	p_in_buffer = (cint16 *)in_buffer;
+	p_out_buffer = (cint16 *)out_buffer;
+	p_twi = (cint16 *)twi_table;
+    c1.re = 0x7fff;
+	c1.im = 0;
+
+	//perform DFT-4
+	switch (ps)
+	{
+		case 0:	case 1: case 2:
+			sv = 1 - ps;
+			vrnd = 0;
+			break;
+		default:
+			ps = 2;
+			sv = -1;
+			vrnd = 0;
+			break;
+	}
+	if(0 == no_mult)
+	{
+		x[0] = cadd_sat16(p_in_buffer[0], p_in_buffer[2]);
+		x[1] = cadd_sat16(p_in_buffer[1], p_in_buffer[3]);
+		x[2] = csub_sat16(p_in_buffer[0], p_in_buffer[2]);
+		x[3] = csub_sat16(p_in_buffer[1], p_in_buffer[3]);
+		z[0] = cadd_sat16(x[0], x[1]);
+		z[2] = csub_sat16(x[0], x[1]);
+
+		if(1 == cFlag)
+		{
+			z[1] = cswas_pm_sat16(x[2], x[3]);
+			z[3] = cswas_mp_sat16(x[2], x[3]);
+			
+			z[0] = acExtract_h (acL_mpy_sat32 (z[0], c1, vrnd, sv) );
+			z[1] = acExtract_h (acL_mpy_sat32 (z[1], p_twi[0], vrnd, sv) );
+			z[2] = acExtract_h (acL_mpy_sat32 (z[2], p_twi[1], vrnd, sv) );
+			z[3] = acExtract_h (acL_mpy_sat32 (z[3], p_twi[2], vrnd, sv) );
+		}
+		else
+		{
+			z[1] = cswas_mp_sat16(x[2], x[3]);
+			z[3] = cswas_pm_sat16(x[2], x[3]);
+			
+			z[0] = acExtract_h (acL_mpy_conj_sat32 (z[0], c1, vrnd, sv) );
+			z[1] = acExtract_h (acL_mpy_conj_sat32 (z[1], p_twi[0], vrnd, sv) );
+			z[2] = acExtract_h (acL_mpy_conj_sat32 (z[2], p_twi[1], vrnd, sv) );
+			z[3] = acExtract_h (acL_mpy_conj_sat32 (z[3], p_twi[2], vrnd, sv) );
+		}
+	}
+	else if(1 == no_mult)
+	{
+		x[0] = cadd_sat16(p_in_buffer[0], p_in_buffer[2]);
+		x[1] = cadd_sat16(p_in_buffer[1], p_in_buffer[3]);
+		z[2] = csub_sat16(x[0], x[1]);//z[2]
+		z[0] = cadd_sat16(x[0], x[1]);//z[0]
+		
+		x[0] = csub_sat16(p_in_buffer[0], p_in_buffer[2]);
+		x[1] = csub_sat16(p_in_buffer[1], p_in_buffer[3]);
+
+		if(1 == cFlag)
+		{
+			x[2] = cswas_pm_sat16(x[0], x[1]);//z[1]
+			x[3] = cswas_mp_sat16(x[0], x[1]);//z[3]
+		}
+		else
+		{
+			x[2] = cswas_mp_sat16(x[0], x[1]);//z[1]
+			x[3] = cswas_pm_sat16(x[0], x[1]);//z[3]
+		}
+		if(0 <= ps)
+		{
+			p0 = (int32)z[2].re;
+			z[2].re = (int16)(p0>>ps);
+			p0 = (int32)z[2].im;
+			z[2].im = (int16)(p0>>ps);
+			p0 = (int32)z[0].re;
+			z[0].re = (int16)(p0>>ps);
+			p0 = (int32)z[0].im;
+			z[0].im = (int16)(p0>>ps);
+
+			p0 = (int32)x[2].re;
+			z[1].re = (int16)(p0>>ps);
+			p0 = (int32)x[2].im;
+			z[1].im = (int16)(p0>>ps);
+			p0 = (int32)x[3].re;
+			z[3].re = (int16)(p0>>ps);
+			p0 = (int32)x[3].im;
+			z[3].im = (int16)(p0>>ps);					
+		}
+	}
+	
+	// store rezults
+	p_out_buffer[0] = z[0];
+	p_out_buffer[1] = z[1];
+	p_out_buffer[2] = z[2];
+	p_out_buffer[3] = z[3];
+
+}//void radix4_kernel (int16 in_buffer[], int16 out_buffer[], int16 twi_table[])
+
+int vshift2w(int32 *vix, int32 *viz, int sv, int Qop)
+{
+    int i;
+    int16 wh, wl;
+    if (Qop > 16)
+    {
+        printf ("vshift failed ");
+        return (1);
+    }
+    if ((sv > 16) || (sv < -16))//we accept only negative values
+    {
+        printf ("vshift failed ");
+        return(1);
+    }
+
+
+    if(0 <= sv)
+	{
+		for (i=0; i<Qop; i++)
+		{
+			wh = Extract_h(vix[i])>>sv;
+			wl = Extract_l(vix[i])>>sv;
+
+			viz[i]  = (int32)( (uint32)wh<<16 | (uint32)(uint16)wl );
+		}
+	}
+	else
+	{
+		for (i=0; i<Qop; i++)
+		{
+			wh = Extract_h(vix[i])<<(-sv);
+			wl = Extract_l(vix[i])<<(-sv);
+
+			viz[i]  = (int32)( (uint32)wh<<16 | (uint32)(uint16)wl );
+		}
+	}
+
+    return (0);
+}
+
+/**------------------------------------------------------------------------------------------------------------------**\
+ * 功能详述:
+ *     - OBM_FFT_128函数其功能是:128点FFT变换
+ *     
+ * 参数概述:
+ *     - pwDataIn: 输入数据,长度128*2个int16
+ *     - pwDataOut: 检测结果,长度128*2个int16
+ *     - pwTwidTab: 128点的旋转因子常量表，该接口只在汇编时使用 
+ *     - pcUserScl: Scale[4] = {1, 1, 1, 0}，前3级基4的Scale可配，每一级scale取值范围{0,1,2}
+ *     - pwTempBuf: 缓存buffer,长度128*2个int16
+ *     - cFreqAgcScl：SRS高铁&Ls专有参数         
+ *     -          
+ *     - 返回值类型是, 含义是:
+\**------------------------------------------------------------------------------------------------------------------**/
+const int digit_rev_indx_64[64];
+const int16 twi_table_ln_128 [2*128];
+void OBM_FFT_128(short *pwDataIn, short *pwDataOut, short *pwTwidTab, short *pcUserScl, short *pwTempBuf, char cFreqAgcScl)
+{
+    int fft_size = 128;
+    int i,j,l;
+    int n_of_butts, n_of_groups, n_of_stages;
+    cint16 *p_in, *p_out, *p_twi_table, *p_tmp;
+    cint16 butt_in[4], butt_out[4], twi[3], tmp0, tmp1;
+	short SclSum, AgcScl;
+
+    p_twi_table = (cint16 *)twi_table_ln_128;
+    p_in = (cint16 *)pwDataIn;
+    p_out = (cint16 *)pwTempBuf;
+
+    n_of_groups = 1;
+    n_of_butts = (fft_size>>2);
+    n_of_stages = 3;
+	SclSum = 0;
+    for (l=0; l<n_of_stages; l++) // stages loop
+    {
+		SclSum += pcUserScl[l];
+        for (j=0; j<n_of_groups; j++) //butt group loop
+        {
+            for (i=0; i<n_of_butts; i++) //butt loop
+            {
+                butt_in[0] = p_in[i];
+                butt_in[1] = p_in[i+n_of_butts];
+                butt_in[2] = p_in[i+2*n_of_butts];
+                butt_in[3] = p_in[i+3*n_of_butts];
+
+                twi[0] = p_twi_table[n_of_groups*i];
+                twi[1] = p_twi_table[2*n_of_groups*i];
+                twi[2] = p_twi_table[3*n_of_groups*i];
+                radix4_kernel ((int16 *)butt_in, (int16 *)butt_out, (int16 *)twi, 0, pcUserScl[l], 1);
+
+                p_out[i] = butt_out[0];
+                p_out[i+n_of_butts] = butt_out[1];
+                p_out[i+2*n_of_butts] = butt_out[2];
+                p_out[i+3*n_of_butts] = butt_out[3];
+
+            }//for (i=0; i<n_of_butts; i++)
+            p_in+=4*n_of_butts;
+            p_out+=4*n_of_butts;
+        }//for (j=0; j<n_of_butts; j++)
+        p_in = (cint16 *)pwTempBuf;
+        p_out = (cint16 *)pwTempBuf;
+        n_of_butts = (n_of_butts>>2);
+        n_of_groups = (n_of_groups<<2);
+    }//for (l=0; l<n_of_stages; l++)
+
+//  perform FFT-64 of even elements
+    p_in = (cint16 *)pwTempBuf;
+    p_tmp = (cint16 *)pwDataOut;
+    for (i=0; i<fft_size/2; i++)
+	{
+        p_tmp[i] = p_in[2*i];
+        p_tmp[fft_size/2+i] = p_in[2*i+1];
+	}
+
+    //reorder results
+	p_in = (cint16 *)pwDataOut;
+    p_out = (cint16 *)pwTempBuf;
+    for (i=0; i<fft_size/2;i++)
+    {
+        p_out[digit_rev_indx_64[i]] = p_in[i];
+        p_out[fft_size/2+digit_rev_indx_64[i]] = p_in[fft_size/2+i];
+    }
+
+    //256 DFT-2 of of former columns
+	p_in = (cint16 *)pwTempBuf;
+    p_out = (cint16 *)pwDataOut;
+    for (i=0; i<fft_size/2; i++)
+    {
+        tmp0 = cadd_sat16(p_in[i], p_in[fft_size/2+i]);
+        tmp1 = csub_sat16(p_in[i], p_in[fft_size/2+i]);
+
+        p_out[i] = tmp0;
+        p_out[fft_size/2+i] = tmp1;
+    }//for (i=0; i<fft_size/2; i++)
+	
+
+	AgcScl = SclSum*2 - 10;
+	AgcScl = AgcScl - cFreqAgcScl;
+	AgcScl = AgcScl - pcUserScl[3];
+	AgcScl = -AgcScl;
+	for (i=0; i<fft_size; i+=16) 
+	{
+        vshift2w(&p_out[i], &p_out[i], AgcScl, 16);
+	}
+}//end void CEVA_DSP_LIB_FFT_128(int16 *pwDataIn, int16 *pwConstIn, int16 *pwTmp_Buffer, int16 *pwDataOut)
+
+
+/**------------------------------------------------------------------------------------------------------------------**\
+ * 功能详述:
+ *     - OBM_IFFT_128函数其功能是:128点FFT变换
+ *     
+ * 参数概述:
+ *     - pwDataIn: 输入数据,长度128*2个int16
+ *     - pwDataOut: 检测结果,长度128*2个int16
+ *     - pwTwidTab: 128点的旋转因子常量表，该接口只在汇编时使用 
+ *     - pcUserScl: Scale[4] = {1, 1, 1, 0}，每级的Scale可配，每一级scale取值范围{0,1,2}
+ *     - pwTempBuf: 缓存buffer,长度128*2个int16
+ *     -          
+ *     - 返回值类型是, 含义是:
+\**------------------------------------------------------------------------------------------------------------------**/
+void OBM_IFFT_128(short *pwDataIn, short *pwDataOut, short *pwTwidTab, short *pcUserScl, short *pwTempBuf)
+{
+    int fft_size = 128;
+    int i,j,l;
+    int n_of_butts, n_of_groups, n_of_stages;
+    cint16 *p_in, *p_out, *p_twi_table, *p_tmp;
+    cint16 butt_in[4], butt_out[4], twi[3], tmp0, tmp1;
+
+    p_twi_table = (cint16 *)twi_table_ln_128;
+    p_in = (cint16 *)pwDataIn;
+    p_out = (cint16 *)pwTempBuf;
+
+    n_of_groups = 1;
+    n_of_butts = (fft_size>>2);
+    n_of_stages = 3;
+    for (l=0; l<n_of_stages; l++) // stages loop
+    {
+        for (j=0; j<n_of_groups; j++) //butt group loop
+        {
+            for (i=0; i<n_of_butts; i++) //butt loop
+            {
+                butt_in[0] = p_in[i];
+                butt_in[1] = p_in[i+n_of_butts];
+                butt_in[2] = p_in[i+2*n_of_butts];
+                butt_in[3] = p_in[i+3*n_of_butts];
+
+                twi[0] = p_twi_table[n_of_groups*i];
+                twi[1] = p_twi_table[2*n_of_groups*i];
+                twi[2] = p_twi_table[3*n_of_groups*i];
+                radix4_kernel ((int16 *)butt_in, (int16 *)butt_out, (int16 *)twi, 0, pcUserScl[l], 0);
+
+                p_out[i] = butt_out[0];
+                p_out[i+n_of_butts] = butt_out[1];
+                p_out[i+2*n_of_butts] = butt_out[2];
+                p_out[i+3*n_of_butts] = butt_out[3];
+
+            }//for (i=0; i<n_of_butts; i++)
+            p_in+=4*n_of_butts;
+            p_out+=4*n_of_butts;
+        }//for (j=0; j<n_of_butts; j++)
+        p_in = (cint16 *)pwTempBuf;
+        p_out = (cint16 *)pwTempBuf;
+        n_of_butts = (n_of_butts>>2);
+        n_of_groups = (n_of_groups<<2);
+    }//for (l=0; l<n_of_stages; l++)
+
+//  perform FFT-256 of even elements
+    p_in = (cint16 *)pwTempBuf;
+    p_tmp = (cint16 *)pwDataOut;
+    for (i=0; i<fft_size/2; i++)
+	{
+        p_tmp[i] = p_in[2*i];
+        p_tmp[fft_size/2+i] = p_in[2*i+1];
+	}
+
+    //reorder results
+	p_in = (cint16 *)pwDataOut;
+    p_out = (cint16 *)pwTempBuf;
+    for (i=0; i<fft_size/2;i++)
+    {
+        p_out[digit_rev_indx_64[i]] = p_in[i];
+        p_out[fft_size/2+digit_rev_indx_64[i]] = p_in[fft_size/2+i];
+    }
+
+    //256 DFT-2 of of former columns
+	p_in = (cint16 *)pwTempBuf;
+    p_out = (cint16 *)pwDataOut;
+    for (i=0; i<fft_size/2; i++)
+    {
+        tmp0 = cadd_sat16(p_in[i], p_in[fft_size/2+i]);
+        tmp1 = csub_sat16(p_in[i], p_in[fft_size/2+i]);
+
+        p_out[i] = tmp0;
+        p_out[fft_size/2+i] = tmp1;
+    }//for (i=0; i<fft_size/2; i++)
+	
+	for (i=0; i<fft_size; i+=16) 
+	{
+        vshift2w(&p_out[i], &p_out[i], pcUserScl[4], 16);
+	}
+}//OBM_IFFT_128(short *pwDataIn, short *pwDataOut, short *pwTwidTab, short *pcUserScl, short *pwTempBuf)
+
+
+// table for 128.
+const int digit_rev_indx_64[64] = {
+	0, 16, 32, 48, 4, 20, 36, 52, 8,  24, 40, 56, 12, 28, 44, 60,
+	1, 17, 33, 49, 5, 21, 37, 53, 9,  25, 41, 57, 13, 29, 45, 61,
+	2, 18, 34, 50, 6, 22, 38, 54, 10, 26, 42, 58, 14, 30, 46, 62,
+	3, 19, 35, 51, 7, 23, 39, 55, 11, 27, 43, 59, 15, 31, 47, 63
+};
+const int16 twi_table_ln_128 [2*128]= {
+	(int16)0x7FFF,(int16)0x0,
+	(int16)0x7FD8,(int16)0xF9B8,
+	(int16)0x7F61,(int16)0xF374,
+	(int16)0x7E9C,(int16)0xED38,
+	(int16)0x7D89,(int16)0xE707,
+	(int16)0x7C29,(int16)0xE0E6,
+	(int16)0x7A7C,(int16)0xDAD8,
+	(int16)0x7884,(int16)0xD4E1,
+	(int16)0x7641,(int16)0xCF05,
+	(int16)0x73B5,(int16)0xC946,
+	(int16)0x70E2,(int16)0xC3AA,
+	(int16)0x6DC9,(int16)0xBE32,
+	(int16)0x6A6D,(int16)0xB8E4,
+	(int16)0x66CF,(int16)0xB3C1,
+	(int16)0x62F1,(int16)0xAECD,
+	(int16)0x5ED7,(int16)0xAA0B,
+	(int16)0x5A82,(int16)0xA57E,
+	(int16)0x55F5,(int16)0xA129,
+	(int16)0x5133,(int16)0x9D0F,
+	(int16)0x4C3F,(int16)0x9931,
+	(int16)0x471C,(int16)0x9593,
+	(int16)0x41CE,(int16)0x9237,
+	(int16)0x3C56,(int16)0x8F1E,
+	(int16)0x36BA,(int16)0x8C4B,
+	(int16)0x30FB,(int16)0x89BF,
+	(int16)0x2B1F,(int16)0x877C,
+	(int16)0x2528,(int16)0x8584,
+	(int16)0x1F1A,(int16)0x83D7,
+	(int16)0x18F9,(int16)0x8277,
+	(int16)0x12C8,(int16)0x8164,
+	(int16)0xC8C,(int16)0x809F,
+	(int16)0x648,(int16)0x8028,
+	(int16)0x0,(int16)0x8001,
+	(int16)0xF9B8,(int16)0x8028,
+	(int16)0xF374,(int16)0x809F,
+	(int16)0xED38,(int16)0x8164,
+	(int16)0xE707,(int16)0x8277,
+	(int16)0xE0E6,(int16)0x83D7,
+	(int16)0xDAD8,(int16)0x8584,
+	(int16)0xD4E1,(int16)0x877C,
+	(int16)0xCF05,(int16)0x89BF,
+	(int16)0xC946,(int16)0x8C4B,
+	(int16)0xC3AA,(int16)0x8F1E,
+	(int16)0xBE32,(int16)0x9237,
+	(int16)0xB8E4,(int16)0x9593,
+	(int16)0xB3C1,(int16)0x9931,
+	(int16)0xAECD,(int16)0x9D0F,
+	(int16)0xAA0B,(int16)0xA129,
+	(int16)0xA57E,(int16)0xA57E,
+	(int16)0xA129,(int16)0xAA0B,
+	(int16)0x9D0F,(int16)0xAECD,
+	(int16)0x9931,(int16)0xB3C1,
+	(int16)0x9593,(int16)0xB8E4,
+	(int16)0x9237,(int16)0xBE32,
+	(int16)0x8F1E,(int16)0xC3AA,
+	(int16)0x8C4B,(int16)0xC946,
+	(int16)0x89BF,(int16)0xCF05,
+	(int16)0x877C,(int16)0xD4E1,
+	(int16)0x8584,(int16)0xDAD8,
+	(int16)0x83D7,(int16)0xE0E6,
+	(int16)0x8277,(int16)0xE707,
+	(int16)0x8164,(int16)0xED38,
+	(int16)0x809F,(int16)0xF374,
+	(int16)0x8028,(int16)0xF9B8,
+	(int16)0x8001,(int16)0x0,
+	(int16)0x8028,(int16)0x648,
+	(int16)0x809F,(int16)0xC8C,
+	(int16)0x8164,(int16)0x12C8,
+	(int16)0x8277,(int16)0x18F9,
+	(int16)0x83D7,(int16)0x1F1A,
+	(int16)0x8584,(int16)0x2528,
+	(int16)0x877C,(int16)0x2B1F,
+	(int16)0x89BF,(int16)0x30FB,
+	(int16)0x8C4B,(int16)0x36BA,
+	(int16)0x8F1E,(int16)0x3C56,
+	(int16)0x9237,(int16)0x41CE,
+	(int16)0x9593,(int16)0x471C,
+	(int16)0x9931,(int16)0x4C3F,
+	(int16)0x9D0F,(int16)0x5133,
+	(int16)0xA129,(int16)0x55F5,
+	(int16)0xA57E,(int16)0x5A82,
+	(int16)0xAA0B,(int16)0x5ED7,
+	(int16)0xAECD,(int16)0x62F1,
+	(int16)0xB3C1,(int16)0x66CF,
+	(int16)0xB8E4,(int16)0x6A6D,
+	(int16)0xBE32,(int16)0x6DC9,
+	(int16)0xC3AA,(int16)0x70E2,
+	(int16)0xC946,(int16)0x73B5,
+	(int16)0xCF05,(int16)0x7641,
+	(int16)0xD4E1,(int16)0x7884,
+	(int16)0xDAD8,(int16)0x7A7C,
+	(int16)0xE0E6,(int16)0x7C29,
+	(int16)0xE707,(int16)0x7D89,
+	(int16)0xED38,(int16)0x7E9C,
+	(int16)0xF374,(int16)0x7F61,
+	(int16)0xF9B8,(int16)0x7FD8,
+	(int16)0x0,(int16)0x7FFF,
+	(int16)0x648,(int16)0x7FD8,
+	(int16)0xC8C,(int16)0x7F61,
+	(int16)0x12C8,(int16)0x7E9C,
+	(int16)0x18F9,(int16)0x7D89,
+	(int16)0x1F1A,(int16)0x7C29,
+	(int16)0x2528,(int16)0x7A7C,
+	(int16)0x2B1F,(int16)0x7884,
+	(int16)0x30FB,(int16)0x7641,
+	(int16)0x36BA,(int16)0x73B5,
+	(int16)0x3C56,(int16)0x70E2,
+	(int16)0x41CE,(int16)0x6DC9,
+	(int16)0x471C,(int16)0x6A6D,
+	(int16)0x4C3F,(int16)0x66CF,
+	(int16)0x5133,(int16)0x62F1,
+	(int16)0x55F5,(int16)0x5ED7,
+	(int16)0x5A82,(int16)0x5A82,
+	(int16)0x5ED7,(int16)0x55F5,
+	(int16)0x62F1,(int16)0x5133,
+	(int16)0x66CF,(int16)0x4C3F,
+	(int16)0x6A6D,(int16)0x471C,
+	(int16)0x6DC9,(int16)0x41CE,
+	(int16)0x70E2,(int16)0x3C56,
+	(int16)0x73B5,(int16)0x36BA,
+	(int16)0x7641,(int16)0x30FB,
+	(int16)0x7884,(int16)0x2B1F,
+	(int16)0x7A7C,(int16)0x2528,
+	(int16)0x7C29,(int16)0x1F1A,
+	(int16)0x7D89,(int16)0x18F9,
+	(int16)0x7E9C,(int16)0x12C8,
+	(int16)0x7F61,(int16)0xC8C,
+	(int16)0x7FD8,(int16)0x648
+};
+
+const int16 twi_table_ln_64[2*64]={
+(int16)0x7FFF,(int16)0x0000,
+(int16)0x7F61,(int16)0xF374,
+(int16)0x7D89,(int16)0xE707,
+(int16)0x7A7C,(int16)0xDAD8,
+(int16)0x7641,(int16)0xCF05,
+(int16)0x70E2,(int16)0xC3AA,
+(int16)0x6A6D,(int16)0xB8E4,
+(int16)0x62F1,(int16)0xAECD,
+(int16)0x5A82,(int16)0xA57E,
+(int16)0x5133,(int16)0x9D0F,
+(int16)0x471C,(int16)0x9593,
+(int16)0x3C56,(int16)0x8F1E,
+(int16)0x30FB,(int16)0x89BF,
+(int16)0x2528,(int16)0x8584,
+(int16)0x18F9,(int16)0x8277,
+(int16)0x0C8C,(int16)0x809F,
+(int16)0x0000,(int16)0x8001,
+(int16)0xF374,(int16)0x809F,
+(int16)0xE707,(int16)0x8277,
+(int16)0xDAD8,(int16)0x8584,
+(int16)0xCF05,(int16)0x89BF,
+(int16)0xC3AA,(int16)0x8F1E,
+(int16)0xB8E4,(int16)0x9593,
+(int16)0xAECD,(int16)0x9D0F,
+(int16)0xA57E,(int16)0xA57E,
+(int16)0x9D0F,(int16)0xAECD,
+(int16)0x9593,(int16)0xB8E4,
+(int16)0x8F1E,(int16)0xC3AA,
+(int16)0x89BF,(int16)0xCF05,
+(int16)0x8584,(int16)0xDAD8,
+(int16)0x8277,(int16)0xE707,
+(int16)0x809F,(int16)0xF374,
+(int16)0x8001,(int16)0x0000,
+(int16)0x809F,(int16)0x0C8C,
+(int16)0x8277,(int16)0x18F9,
+(int16)0x8584,(int16)0x2528,
+(int16)0x89BF,(int16)0x30FB,
+(int16)0x8F1E,(int16)0x3C56,
+(int16)0x9593,(int16)0x471C,
+(int16)0x9D0F,(int16)0x5133,
+(int16)0xA57E,(int16)0x5A82,
+(int16)0xAECD,(int16)0x62F1,
+(int16)0xB8E4,(int16)0x6A6D,
+(int16)0xC3AA,(int16)0x70E2,
+(int16)0xCF05,(int16)0x7641,
+(int16)0xDAD8,(int16)0x7A7C,
+(int16)0xE707,(int16)0x7D89,
+(int16)0xF374,(int16)0x7F61,
+(int16)0x0000,(int16)0x7FFF,
+(int16)0x0C8C,(int16)0x7F61,
+(int16)0x18F9,(int16)0x7D89,
+(int16)0x2528,(int16)0x7A7C,
+(int16)0x30FB,(int16)0x7641,
+(int16)0x3C56,(int16)0x70E2,
+(int16)0x471C,(int16)0x6A6D,
+(int16)0x5133,(int16)0x62F1,
+(int16)0x5A82,(int16)0x5A82,
+(int16)0x62F1,(int16)0x5133,
+(int16)0x6A6D,(int16)0x471C,
+(int16)0x70E2,(int16)0x3C56,
+(int16)0x7641,(int16)0x30FB,
+(int16)0x7A7C,(int16)0x2528,
+(int16)0x7D89,(int16)0x18F9,
+(int16)0x7F61,(int16)0x0C8C,
+};
+
+void OBM_FFT_64(short *pwDataIn, short *pwDataOut, short *pwTwidTab, short *pcUserScl, short *pwTempBuf, char cFreqAgcScl)
+{
+    int fft_size = 64;
+    int i,j,l;
+    int n_of_butts, n_of_groups, n_of_stages;
+    cint16 *p_in, *p_out, *p_twi_table, *p_tmp;
+    cint16 butt_in[4], butt_out[4], twi[3], tmp0, tmp1;
+	short SclSum, AgcScl;
+
+    p_twi_table = (cint16 *)twi_table_ln_64;
+    p_in = (cint16 *)pwDataIn;
+    p_out = (cint16 *)pwTempBuf;
+
+    n_of_groups = 1;
+    n_of_butts = (fft_size>>2);
+    n_of_stages = 3;
+	SclSum = 0;
+    for (l=0; l<n_of_stages; l++) // stages loop
+    {
+		SclSum += pcUserScl[l];
+        for (j=0; j<n_of_groups; j++) //butt group loop
+        {
+            for (i=0; i<n_of_butts; i++) //butt loop
+            {
+                butt_in[0] = p_in[i];
+                butt_in[1] = p_in[i+n_of_butts];
+                butt_in[2] = p_in[i+2*n_of_butts];
+                butt_in[3] = p_in[i+3*n_of_butts];
+
+                twi[0] = p_twi_table[n_of_groups*i];
+                twi[1] = p_twi_table[2*n_of_groups*i];
+                twi[2] = p_twi_table[3*n_of_groups*i];
+                radix4_kernel ((int16 *)butt_in, (int16 *)butt_out, (int16 *)twi, 0, pcUserScl[l], 1);
+
+                p_out[i] = butt_out[0];
+                p_out[i+n_of_butts] = butt_out[1];
+                p_out[i+2*n_of_butts] = butt_out[2];
+                p_out[i+3*n_of_butts] = butt_out[3];
+
+            }//for (i=0; i<n_of_butts; i++)
+            p_in+=4*n_of_butts;
+            p_out+=4*n_of_butts;
+        }//for (j=0; j<n_of_butts; j++)
+        p_in = (cint16 *)pwTempBuf;
+        p_out = (cint16 *)pwTempBuf;
+        n_of_butts = (n_of_butts>>2);
+        n_of_groups = (n_of_groups<<2);
+    }//for (l=0; l<n_of_stages; l++)
+
+
+	p_in = (cint16 *)pwTempBuf;
+	p_tmp = (cint16 *)pwDataOut;
+	for(i=0; i<64; i++)
+	{
+		p_tmp[digit_rev_indx_64[i]] = p_in[i];
+	}
+//	
+//
+//	AgcScl = SclSum*2 - 10;
+//	AgcScl = AgcScl - cFreqAgcScl;
+//	AgcScl = AgcScl - pcUserScl[3];
+//	AgcScl = -AgcScl;
+//	for (i=0; i<fft_size; i+=16) 
+//	{
+//        vshift2w(&p_out[i], &p_out[i], AgcScl, 16);
+//	}
+}//end void CEVA_DSP_LIB_FFT_128(int16 *pwDataIn, int16 *pwConstIn, int16 *pwTmp_Buffer, int16 *pwDataOut)
+
+short matlabData[128]={
+#include "D:\matlab_file\dataIn.txt"
+};
+int main()
+{
+	int i;
+	short dataIn[128]; 
+	short dataOut[128];
+	short twidTab[128];//no use
+	short dataTempBuf[128];
+	short userScl[4]={0,0,0,0};
+	FILE *fp;
+	for(i=0;i<128;i++)
+	{
+		dataIn[i] = matlabData[i];
+	}
+	OBM_FFT_64(dataIn, dataOut, twidTab, userScl, dataTempBuf, 0);
+
+	fp = fopen("D:\\matlab_file\\dataOut_C.txt","wt+");
+	for(i=0;i<128;i=i+2)
+	{
+		fprintf(fp,"%d %d\n",dataOut[i],dataOut[i+1]);
+	}
+	fclose(fp);
+
+	return 0;
+}
