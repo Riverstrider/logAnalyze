@@ -1,0 +1,239 @@
+
+QR分解法求矩阵的逆
+
+#include<stdio.h>
+
+#include<stdlib.h>
+
+#include <math.h>
+
+#define M 20
+
+void set(long double* a,int a_line,int a_row,int i,long double* b,int size) 
+{
+    long double* m=b;
+    if(a_line!=size)
+    {
+        printf("can not set\n");
+        exit(0);
+    }
+    else
+    {
+        for(int k=0;k<a_line;k++)
+        {
+            *(a+i+k*a_row)=*(m++);
+        }
+    }
+
+}
+
+long double* function2(long double* a,int a_size,long double l)
+{ 
+    long double* temp=a;
+    for(int k=0;k<a_size;k++)
+    {
+        *(temp++)*=l;
+    }
+    return a;
+}
+
+long double* draw(long double* a,int a_line,int a_row,int i) 
+{
+    long double* d1=new long double[a_line];
+    long double* temp=d1;
+    for(int k=0;k<a_line;k++)
+    {
+        *(temp++)=*(a+i+k*a_row);
+    }
+    return d1;
+}
+
+long double function1(long double* a,long double* b,int size) 
+{
+    long double sum=0;
+    for(int k=0;k<size;k++)
+    {
+        sum+=*(a+k)**(b+k);
+    }
+    return sum;
+}
+
+void minus(long double* a,long double* b,int size)
+{
+    for(int k=0;k<size;k++)
+    {
+    *(a+k)-=*(b+k);
+    }
+}
+
+void main()
+{
+    long double A[M][M];
+    long double B[M][M];
+    long double E[M][2*M];
+    long double C[M][M];
+    long double D[M][M];
+    long double F[M][M];
+    int i;
+    printf("QR分解法求矩阵的逆\nA=Q*R\n");
+    printf("请输入%d*%d的矩阵：\n",M,M);
+    for(i=0;i<M;i++)
+    {
+        for(int j=0;j<M;j++)
+        {
+            scanf("%lf",*(A+i)+j);
+        }
+    }
+
+    for(int k=0;k<M;k++)
+    {
+        long double* a=draw(A[0],M,M,k);
+        for(int ak=k;ak>0;ak--)
+        {
+            long double* temp=draw(B[0],M,M,ak-1);
+            long double r=function1(a,temp,M)/function1(temp,temp,M); minus(a,function2(temp,M,r),M);
+        }
+        set(B[0],M,M,k,a,M);
+    }
+
+    printf("A正交化：\n");
+    
+    for(i=0;i<M;i++)
+    {
+        for(int j=0;j<M;j++)
+        {
+            printf("%f ",B[i][j]);
+        }
+        printf("\n");
+    }
+
+    for(k=0;k<M;k++)
+    {
+        long double* temp=draw(B[0],M,M,k);
+        long double m=1/sqrt(function1(temp,temp,M));
+        set(B[0],M,M,k,function2(temp,M,m),M); }
+        printf("A单位化:\n得到的Q矩阵：\n");
+        for(i=0;i<M;i++)
+        {
+            for(int j=0;j<M;j++)
+            {
+                printf("%f ",B[i][j]);
+            }
+            printf("\n");
+        }
+        for(i=0;i<M;i++)
+        {
+            for(int j=0;j<M;j++)
+            {
+                C[i][j]=0;
+                for(int k=0;k<M;k++)
+                {
+                    C[i][j]+=B[i][k]*A[k][j];
+                }
+        }
+
+    }
+
+    printf("R矩阵：\n");
+
+    for(i=0;i<M;i++)
+    {
+        for(int j=0;j<M;j++)
+        {
+            printf("%f ",C[i][j]);
+        }
+        printf("\n");
+    }
+
+    for(i=0;i<M;i++)
+    {
+        for(int j=0;j<2*M;j++)
+        {
+            if (j<M) { E[i][j]=C[i][j]; } 
+            else 
+            { 
+                if(j-i==M) E[i][j]=1; 
+                else E[i][j]=0; 
+            } 
+        } 
+        
+    } 
+    
+    for (k=0;k<M-1;k++) 
+    { 
+        for(int i=k+1;i<M;i++) 
+        { 
+            if(E[i][k]==0) break; 
+            else 
+            { 
+                long double l=E[k][k]/E[i][k]; 
+                for(int j=k;j<2*M;j++)
+                { 
+                    E[i][j]*=l; 
+                    E[i][j]-=E[k][j]; 
+                } 
+            } 
+        } 
+    } 
+        
+    for(k=0;k<M-1;k++) 
+    { 
+        for(int i=M-2-k;i>=0;i--) 
+        { 
+            if(E[i][M-1-k]==0) break; 
+            else 
+            { 
+                long double l=E[M-1-k][M-1-k]/E[i][M-1-k]; 
+                for(int j=i;j<2*M;j++) 
+                { 
+                    E[i][j]*=l; 
+                    E[i][j]-=E[M-1-k][j]; 
+                } 
+            }
+        }
+    }
+    
+    for(i=0;i<M;i++)
+    {
+        long double l=E[i][i]; 
+        if(l==0)
+        {
+            printf("没逆矩阵\n"); 
+            exit(0);
+        }
+        else
+        {
+            for(int j=i;j<2*M;j++) 
+                E[i][j]/=l;
+        }
+    }
+    
+    for(i=0;i<M;i++)
+    {
+        for(int j=0;j<M;j++)
+        {
+            F[i][j]=E[i][j+M]; 
+        }
+    }
+    printf("R的逆矩阵:\n");
+    for(i=0;i<M;i++)
+    {
+        for(int j=0;j<M;j++)
+        {
+            printf("%f ",F[i][j]); 
+        }
+        printf("\n");
+    }
+
+    for(i=0;i<M;i++)
+    {
+        for(int j=0;j<M;j++)
+        {
+            D[i][j]=0;
+            for(int k=0;k<M;k++) 
+            {
+                D[i][j]+=F[i][k]*B[k][j]; 
+            }
+        }
+    }
+    printf("最终结果\n");
