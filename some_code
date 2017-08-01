@@ -1,517 +1,378 @@
 
 
-void App_DlFre_Proc(UINT32 udCurSymIdx)
-__attribute__((section(".csect APP_DLFRE_L1P")));
-void App_DlFre_Proc(UINT32 udCurSymIdx)
+T_PuschIDFTProcParaIn *gaptPuschIDFTProcParaIn[APP_MAX_ULCELL_NUM]
+__attribute__((section(".dsect APP_PuschIdft_Frame_L1D")));
+T_PuschIDFTProcDataIn *gaptPuschIDFTProcDataIn[APP_MAX_ULCELL_NUM]
+__attribute__((section(".dsect APP_PuschIdft_Frame_L1D")));
+T_PuschIDFTProcBuffer *gaptPuschIDFTProcBuffer[APP_MAX_ULCELL_NUM]
+__attribute__((section(".dsect APP_PuschIdft_Frame_L1D")));
+T_PuschIDFTProcDataOut *gaptPuschIDFTProcDataOut[APP_MAX_ULCELL_NUM]
+__attribute__((section(".dsect APP_PuschIdft_Frame_L1D")));
+UINT16 gwDftInitTabCnt
+__attribute__((section(".dsect APP_PuschIdft_Frame_L1D")));
+CMPL16 *gapxwIDFTDataIn[2]
+__attribute__((section(".dsect APP_PuschIdft_Frame_L1D")));
+UINT32 gadIdftInTransID[8]//每个核最多完成2cell*4Layer
+__attribute__((section(".dsect APP_PuschIdft_Frame_L1D")));
+UINT32 gaudIdftInitTransID[PUSCH_EQU_IDFT_MAXNUM*2]
+__attribute__((section(".dsect APP_PuschIdft_Frame_L1D")));
+const UINT8 TAB_IDFT_LAYERNUM_MM[4][8]
+__attribute__((section(".dsect APP_PuschIdft_Frame_L1D")))
+= {
+{1,2,2,2,2,2,2,2},
+{0,0,1,2,2,2,2,2},
+{0,0,0,0,1,2,2,2},
+{0,0,0,0,0,0,1,2}};
+
+UINT8 gaucDftIdx[PUSCH_EQU_IDFT_MAXNUM]
+__attribute__((section(".dsect APP_PuschIdft_Frame_L1D")));
+UINT8 gucDftPointCnt
+__attribute__((section(".dsect APP_PuschIdft_Frame_L1D")));
+void App_PuschPreIdft_Proc(
+		UINT32 udCoreId,
+		UINT32 udBPQMode)
+__attribute__((section(".csect APP_PuschIdft_Frame_L2C")));
+void App_PuschPreIdft_Proc(
+		UINT32 udCoreId,
+		UINT32 udBPQMode)
 {
+	UINT8 ucCellCnt,ucCellIdx;
+	UINT8 ucUeCnt;
+	UINT8 *pucInitDftPnt;
+	UINT8 *pucInitDftPntActv;
+	UINT8 ucDftIdx;
+	UINT8 aucDuplicate[34];
+	UINT8 ucDftCnt;
+    UINT8 ucLayerCnt;
+	UINT8 ucLayerNum = 0;
+	T_PuschUESchdInfo	*ptPuschUESchdInfo;
 
-    T_DDmaLinkCpyParam    atDmaLinkParam[2];
-    UINT32 i;
-    UINT32 udCycle;
-    UINT32 udCycleSymbol;
-    UINT32 udMpdcchTABTransID;
-    UINT8  ucCellIdx;
-    UINT8  ucRealCellIdx;
-    UINT8 ucSubFrm;
-    UINT16 uwNextDlSfn;
-    T_IdtData atIdtData[5]; /* idt add */
-    T_DLIdtPara atIdtPara; /* idt add */
+	gucDftPointCnt = 0;
+    gudIdftNLayer = 0;
+    memset(aucDuplicate,0,34);
+	memset(gaucDftIdx,0,20);
+	memset((UINT8 *)gaucInitDftPnt,	0xFF,APP_MAX_ULCELL_NUM * MAX_PUSCH_UE_NUM_PER_TTI);
 
-    gudDlAppSymStart = OSS_CLK_GetCycle();//DspUsedRate
-    udCycleSymbol = OSS_CLK_GetCycle();
+	for(ucCellCnt = 0; ucCellCnt < gucPuschIdftBitCellNum; ucCellCnt++)
+	{
+		ucCellIdx = gaucPuschCellIdx[ucCellCnt];
+		*gpudPuschDbgDot[ucCellIdx] = 101;
+		pucInitDftPnt = gaucInitDftPnt[ucCellIdx];
+		pucInitDftPntActv = gaucInitDftPntActv[ucCellIdx];
 
-    gptDlFreDbgCnt->udDlFreProcDot = 0;
-    gptDlFreDbgCnt->audDlFreProcCnt[udCurSymIdx]++;
+        /*为IDFT计算每一个Layer对应的均衡数据地址，目的简化IDFT流水*/
+        if ((0 == udBPQMode) || (1 == udBPQMode))
+        {
+            gudIdftNLayer = gudIdftNLayer + gaptPuschUETypeInfo[ucCellIdx]->ucLayerNum;//Idft需要完成的流数
+            gauCellLayerNum[ucCellCnt] = gaptPuschUETypeInfo[ucCellIdx]->ucLayerNum;
+            for (ucLayerCnt = 0; ucLayerCnt < gaptPuschUETypeInfo[ucCellIdx]->ucLayerNum; ucLayerCnt++)
+            {
+                gapxwEquTbOut[ucLayerNum] = gapxwEquOut[gaptCellDemInfo[ucCellIdx]->wSfnSubFrm & 1][ucCellIdx][ucLayerCnt];
+				if(0 == ucLayerCnt)
+				{
+					gapxwIdftTbOut[ucLayerNum] = gapxwPucchDataIn[ucCellIdx];
+				}
+				else
+				{
+					gapxwIdftTbOut[ucLayerNum] = gapxwEquTbOut[ucLayerNum];
+				}
+				ucLayerNum ++;
+            }
+        }
+        else if ((2 == udBPQMode) || (3 == udBPQMode) || (5 == udBPQMode))
+        {
+            gudIdftNLayer = (0 < gaptPuschUETypeInfo[ucCellIdx]->ucLayerNum)? 
+				(TAB_IDFT_LAYERNUM_MM[udCoreId][(gaptPuschUETypeInfo[ucCellIdx]->ucLayerNum-1)&0x7]) : 0;
+            gauCellLayerNum[0] = gudIdftNLayer;
+			if(5 == udBPQMode)
+			{
+				for (ucLayerCnt = 0; ucLayerCnt < gudIdftNLayer; ucLayerCnt++)
+	            {
+	                gapxwEquTbOut[ucLayerNum] = gapxwEquOut[gaptCellDemInfo[ucCellIdx]->wSfnSubFrm & 1][ucCellIdx][ucLayerCnt + 2 * gudCoreId];
+					ucLayerNum ++;
+	            }
+			}
+        }
 
-    if(0 == udCurSymIdx)
+		for(ucUeCnt = 0; ucUeCnt < (gaptDemoElemNum[ucCellIdx]->ucPuschUeNum + gaptDemoElemNum[ucCellIdx]->ucCooperCellUserNum); ucUeCnt++)
+		{
+			ptPuschUESchdInfo = gaptPuschUESchdInfo[ucCellIdx] + ucUeCnt;
+			if(((1 == ptPuschUESchdInfo->ucMeasOnlyFlag)||((1 == ptPuschUESchdInfo->ucUeCoOperType)&&(3 != ptPuschUESchdInfo->ucCoOperFlag)))
+                || (((2 == udBPQMode) || (3 == udBPQMode)) && (ptPuschUESchdInfo->ucMimoIdx != 2*udCoreId) && (ptPuschUESchdInfo->ucMimoIdx != (2*udCoreId+1))))
+			{
+				continue;
+			}
+			*(pucInitDftPnt + ucUeCnt) = TAB_RBNUM_IDX34_UINT8[ptPuschUESchdInfo->ucRbNum];
+			ucDftIdx = *(pucInitDftPnt + ucUeCnt);
+			if((0 == aucDuplicate[ucDftIdx]) && (0xff != ucDftIdx))
+			{
+				gaucDftIdx[gucDftPointCnt] = ucDftIdx;
+				gucDftPointCnt ++;
+				aucDuplicate[ucDftIdx] = 1;
+			}
+
+			/* 找出当前UE的IDFT点数所对应的激活索引 */
+			for (ucDftCnt = 0; ucDftCnt < gucDftPointCnt; ucDftCnt++)
+			{
+				if (gaucDftIdx[ucDftCnt] == ucDftIdx)
+				{
+					*(pucInitDftPntActv + ucUeCnt) = ucDftCnt;
+					break;
+				}
+			}
+		}
+		*gpudPuschDbgDot[ucCellIdx] = 102;
+	}
+	if(0 < gudIdftNLayer)
+	{
+		if(0 < gucDftPointCnt)
+		{
+		    CEVA_DFT_GENERIC_INIT(gucDftPointCnt,gaucDftIdx,gaptPuschIDFTProcDataIn[0]->psdInitDftBuffer);
+		}
+		*gpudPuschDbgDot[0] = 103;
+        gatDDmaLinkCpyParam[0].pEaddr = (UINT8 *)gapxwEquTbOut[0];
+        gatDDmaLinkCpyParam[0].pIaddr = (UINT8 *)gapxwIDFTDataIn[0];
+		gatDDmaLinkCpyParam[0].udSize = 12 * 1200 * sizeof(CMPL16);
+		gatDDmaLinkCpyParam[0].udDirection = 0;
+
+        OSS_DDMA_LinkCopy(
+            gudQmanQueHdl,
+            gatDDmaLinkCpyParam,
+            1,
+            &gadIdftInTransID[0]);
+		*gpudPuschDbgDot[0] = 104;
+	}
+}
+
+void App_PuschIdft_Tb(
+		T_PuschIDFTProcDataIn *ptPuschIDFTProcDataIn,
+		T_PuschIDFTProcDataOut *ptPuschIDFTProcDataOut,
+		UINT32 udCoreId,
+		UINT8 ucCellIdx,
+		UINT8 ucTbIdx,
+		UINT8 ucWaitLayerIdx)
+__attribute__((section(".csect APP_PuschIdft_Frame_L1C")));
+void App_PuschIdft_Tb(
+		T_PuschIDFTProcDataIn *ptPuschIDFTProcDataIn,
+		T_PuschIDFTProcDataOut *ptPuschIDFTProcDataOut,
+		UINT32 udCoreId,
+		UINT8 ucCellIdx,
+		UINT8 ucTbIdx,
+		UINT8 ucWaitLayerIdx)
+{
+	UINT32 udIDFTTandsID;
+	UINT16 uwRet;
+	UINT32 udCycle,udCycle0;
+	T_LinkCpyParam atLinkCpyParam[2];
+
+	if(1 == gtULCycle.udCycleFlag0)
+	{
+		udCycle = OSS_CLK_GetCycle();
+	}
+    OSS_DDMA_LinkWait(
+        gudQmanQueHdl,
+        gadIdftInTransID[ucWaitLayerIdx]);
+    
+	if(1 == gtULCycle.udCycleFlag0)
+	{
+		udCycle0 = OSS_CLK_GetCycle();
+		gtULCycle.udIdftWtTb[gtULCycle.udLayerNum] = udCycle0 - udCycle;
+	}
+	*gpudPuschDbgDot[ucCellIdx] = 108;
+	if(0 < gaptPuschUETypeInfo[ucCellIdx]->ucMergeUeNum)
+	{
+             atLinkCpyParam[0].pDst = gaptEquBuffer[ucCellIdx];
+             atLinkCpyParam[0].pSrc = gapxwEquOut[gaptCellDemInfo[ucCellIdx]->wSfnSubFrm & 1][ucCellIdx][0];
+             atLinkCpyParam[0].udSize = APP_MAX_RE_NUM * 12 *  sizeof(CMPL16); 
+             gaudPuschEquSoftTransID[ucCellIdx] = OSS_MEM_DmaLinkCopy(gudCHHandle,atLinkCpyParam, 1, NULL, 0);
+	}
+    gaptPuschIDFTProcParaIn[ucCellIdx]->ucTBidx = 2*udCoreId + ucTbIdx;
+	ptPuschIDFTProcDataOut->pxwIdftOut = ptPuschIDFTProcDataIn->pxwXrcOut;
+	uwRet = OBM_PuschIDFTProc(
+			gaptPuschIDFTProcParaIn[ucCellIdx],
+			ptPuschIDFTProcDataIn,
+			gaptPuschIDFTProcBuffer[ucCellIdx],
+			ptPuschIDFTProcDataOut);
+	if(1 != uwRet)
+	{
+	    gatULDebug[ucCellIdx].tPuschDebug.udIdftIdxErr++;
+	    gatULDebug[ucCellIdx].tPuschDebug.udPuschErrorCode = uwRet;
+		App_ULParaErrCatch(gudCoreId, ucCellIdx,uwRet);
+	    gucPuschCellNum = 0;
+		gucPuschIdftBitCellNum = 0;
+		gucPuschReportBitACellNum = 0;
+		if((3 == gudBPQMode) || (2 == gudBPQMode))
+		{
+			gptULL2D20->gucMMPuschCellNumL2 = 0;
+		}
+		return;
+	}
+	if(1 == gtULCycle.udCycleFlag0)
+	{
+		gtULCycle.udObmIdft[gtULCycle.udLayerNum] = OSS_CLK_GetCycle() - udCycle0;
+		gtULCycle.udLayerNum ++;
+	}
+     
+    gatDDmaLinkCpyParam[0].pEaddr = (UINT8 *)gapxwIdftTbOut[ucWaitLayerIdx];
+	gatDDmaLinkCpyParam[0].pIaddr = (UINT8 *)ptPuschIDFTProcDataOut->pxwIdftOut;
+	gatDDmaLinkCpyParam[0].udSize = 12 * 1200 * sizeof(CMPL16);
+	gatDDmaLinkCpyParam[0].udDirection = 1;
+
+    OSS_DDMA_LinkCopy(
+        gudQmanQueHdl,
+        gatDDmaLinkCpyParam,
+        1,
+        &udIDFTTandsID);
+	*gpudPuschDbgDot[ucCellIdx] = 109;
+}
+
+void App_PuschIdft_Proc()
+__attribute__((section(".csect APP_PuschIdft_Frame_L1C")));
+void App_PuschIdft_Proc()
+{
+	UINT8 ucCycleFlag;
+	UINT8 ucCellIdx;
+    UINT8 ucCellCnt;
+    UINT8 ucLayerCnt;
+    UINT8 ucLayerNum = 1;
+    UINT8 ucLoopNum;
+    UINT32 udCoreId0;
+	UINT32 udTransID = 0xffffffff;
+	T_PuschIDFTProcDataIn *ptPuschIDFTProcDataIn;
+	UINT32 udCycle;
+    T_IdtData tIdtData[2];
+    T_PuschIdtPara tDatPara;
+	
+	if(1 == gtULCycle.udCycleFlag0)
+	{
+		udCycle = OSS_CLK_GetCycle();
+		gtULCycle.udLayerNum = 0;
+	}
+	if(0 == gudModpFlg)
+	{
+		gudModpIEBit[8] = BspGetGlobalState();	//获取全局中断的状态
+	}
+    if ((0 == gudBPQMode) || (1 == gudBPQMode))
     {
-
-    	if(1 == gaudDlCellEnableFlag[0])
-    	{
-    		ucRealCellIdx = gpatCmac2FpgaCellInfoL1[0]->ucCellIndex;
-
-    		atDmaLinkParam[0].pEaddr = (VOID *)(CMAC_DLPHY_PDCCH_INFO_ADDRESS+(ucRealCellIdx)*sizeof(T_MacFpgaPdcchInfo) + (guwNextDlSfn & 0xf) * CMAC_DLPHY_PDCCH_INFO_SFN_SIZE);//DDR
-    		atDmaLinkParam[0].pIaddr = (VOID *)(gatPdcchHiCfiProcParaIn[0].ptPdcchHiCfiPbchPara);//L1
-    		atDmaLinkParam[0].udSize = sizeof(T_MacFpgaPdcchInfo);
-    		atDmaLinkParam[0].udDirection = 0;
-
-    		/* 消除kw告警 */
-    		ucSubFrm = guwDlSfn & 0xf;
-    		ucSubFrm = (ucSubFrm > 9) ? 9 : ucSubFrm;
-    		gptDlFreDbgCnt->atPdcchDbgCnt[0].audMacFpgaPdcchInfoAddr[ucSubFrm]  = (UINT32)(atDmaLinkParam[0].pEaddr);
-
-    		OSS_DDMA_LinkCopy(tDevHandle.audDdmaChHandle[0],
-    				&atDmaLinkParam[0],
-    				1,
-    				&gaudPdcchCellTransID[0][1]);
-    	}
-
-        for(ucCellIdx = 0; ucCellIdx < gucDlMaxCellNum; ucCellIdx++)
-        {
-
-
-        guwDlSfn = guwDlIntSfn;
-        uwNextDlSfn = NextNumSubFrm(guwDlSfn,1);
-        guwNextDlSfn = uwNextDlSfn;
-
-        if(APP_DL_CELL_MODE_TMM == gucDlCellMode)
-        {
-            gptWCalcPowerInfoL2Addr->gaudWCoreFinishFlag[gudCoreId - 4] = 0;
-        }
-
-        if(5 == gudBPQMode)
-        {
-            if(((1 == gudDlAcSendTestFlag)&&((guwDlSfn&0xf)== gudDlAcTestsubframe))
-               ||((1 == gpatAcProcStat[0]->ucActive)&&(gpatAcProcStat[0]->wAcTimeFrameSubNo == guwDlSfn)))
-            {
-                //gtDlAcDbgCnt.udSpecSubFrmCnt++;
-                App_DlAc_Proc(0, udCurSymIdx);
-
-                //DspUsedRate
-               gudDlAppSymCost = OSS_CLK_GetCycle() - gudDlAppSymStart;
-               gudDspLoad = gudDspLoad + gudDlAppSymCost;
-                return;
-            }
-        }
-
-        gudTbDataWaitFlag = 0;
-        gptDlFreDbgCnt->udDlFreProcDot = 1;
-
-        if(1 == gucDlRctEnableFlg)
-        {
-            gudTbDataCopyFlag = 0;
-            App_DlRctProc(udCurSymIdx,&atDmaLinkParam[0]);
-        }
-        else
-        {
-            //DL RCT不使能
-            gptDlFreDbgCnt->udDlFreProcDot = 2;
-
-            if((1 == gudTbDataCopyFlag)&&((APP_DL_CELL_MODE_TMM == gucDlCellMode) || (APP_DL_CELL_MODE_FMM == gucDlCellMode)))
-            {
-                //MM TB搬数和PDCCH处理流水
-                atDmaLinkParam[0].pEaddr = (VOID *)((UINT32) (gapucDlTbDataL2Addr[guwDlSfn&0x01]) + FIC_OFFSET);//L2
-                atDmaLinkParam[0].pIaddr = (VOID *)(gpucDlTbDataL1Addr);//L1
-                if(APP_DL_CELL_MODE_TMM == gucDlCellMode)
-                {
-                  atDmaLinkParam[0].udSize = 86400*2;
-                }
-                else
-                {
-                	atDmaLinkParam[0].udSize = 80160*2;
-                }
-                atDmaLinkParam[0].udDirection = 0;
-                gptDlFreDbgCnt->audTBData0Addr[guwDlSfn & 0x1][0] = atDmaLinkParam[0].pEaddr;
-
-                //启动DDMA
-                OSS_DDMA_LinkCopy(tDevHandle.audDdmaChHandle[0],
-                        &atDmaLinkParam[0],
-                        1,
-                        &gudTbDataTransID);
-            }
-            else if((1 == gudTbDataCopyFlag)&&((APP_DL_CELL_MODE_MACRO6 == gucDlCellMode)||(APP_DL_CELL_MODE_MACRO12 == gucDlCellMode)))
-            {
-
-                //宏站下PDCCH处理和TB buffer中后面132480字节流水
-                atDmaLinkParam[0].pEaddr = (VOID *)((UINT32) (gapucDlTbDataL2Addr[guwDlSfn&0x01] +132480) + FIC_OFFSET);//L2
-                atDmaLinkParam[0].pIaddr = (VOID *)(gpucDlTbDataL1Addr+132480);//L1
-                atDmaLinkParam[0].udSize = 132480;
-                atDmaLinkParam[0].udDirection = 0;
-                gptDlFreDbgCnt->audTBData0Addr[guwDlSfn & 0x1][0] = atDmaLinkParam[0].pEaddr;
-
-                //启动DDMA
-                OSS_DDMA_LinkCopy(tDevHandle.audDdmaChHandle[0],
-                        &atDmaLinkParam[0],
-                        1,
-                        &gudTbDataTransID);
-
-            }
-
-            App_TbDataOverTimeCheck(guwDlSfn);
-
-            gptDlFreDbgCnt->udDlFreProcDot = 3;
-
-    		ucSubFrm = guwDlSfn & 0xf;
-    		ucSubFrm = (ucSubFrm > 9) ? 9 : ucSubFrm;
-            for(ucCellIdx = 0; ucCellIdx < gucDlMaxCellNum; ucCellIdx++)
-            {
-                if(1 == gaudDlCellEnableFlag[ucCellIdx])
-                {
-                     OSS_DDMA_LinkWait(tDevHandle.audDdmaChHandle[0],gaudPdcchCellTransID[ucCellIdx][1]);
-
-			 
-                    
-			if((1 ==  (((T_MacFpgaPdcchInfo*)(gatPdcchHiCfiProcParaIn[ucCellIdx].ptPdcchHiCfiPbchPara))->ucCatch_Cell_en)) && ( 1 == (((T_MacFpgaPdcchInfo*)(gatPdcchHiCfiProcParaIn[ucCellIdx].ptPdcchHiCfiPbchPara))->ucCatch_AntBitmap)))
-			{
-				gudCatchStart[ucCellIdx] = 2;
-			}
-			else if(1 !=  (((T_MacFpgaPdcchInfo*)(gatPdcchHiCfiProcParaIn[ucCellIdx].ptPdcchHiCfiPbchPara))->ucCatch_AntBitmap))
-			{
-                   		 gudCatchStart[ucCellIdx] = ((T_MacFpgaPdcchInfo*)(gatPdcchHiCfiProcParaIn[ucCellIdx].ptPdcchHiCfiPbchPara))->ucCatch_Cell_en;
-			}
-			
-                }
-                gaudPdcchCellTransID[ucCellIdx][0] = 0xffffffff;
-                gaudPdcchCellTransID[ucCellIdx][1] = 0xffffffff;
-                //启动下一个小区的PDCCH预处理消息搬移
-                if((gucDlMaxCellNum > 1)&&(ucCellIdx < (gucDlMaxCellNum-1)))
-                {
-
-                    if(1 == gaudDlCellEnableFlag[ucCellIdx+1])
-                    {
-                        ucRealCellIdx = gpatCmac2FpgaCellInfoL1[ucCellIdx+1]->ucCellIndex;
-
-                        atDmaLinkParam[0].pEaddr = (UCHAR *)((T_Cmac2DspPdcchCellPrePara *)(CMAC_DLPHY_PDCCH_CELL_PRE_INFO_ADDRESS +ucRealCellIdx*CMAC_DLPHY_SINGLE_CELL_INFO_SIZE));//DDR
-                        atDmaLinkParam[0].pIaddr = (UCHAR *)(gatPdcchHiCfiProcParaIn[ucCellIdx+1].ptPdcchHiCfiPrePara);//L1
-                        atDmaLinkParam[0].udSize = sizeof(T_Cmac2DspPdcchCellPrePara);
-                        atDmaLinkParam[0].udDirection = 0;
-
-                        atDmaLinkParam[1].pEaddr = (VOID *)(CMAC_DLPHY_PDCCH_INFO_ADDRESS+(ucRealCellIdx)*sizeof(T_MacFpgaPdcchInfo) + (guwDlSfn & 0xf) * CMAC_DLPHY_PDCCH_INFO_SFN_SIZE);//DDR
-                        atDmaLinkParam[1].pIaddr = (VOID *)(gatPdcchHiCfiProcParaIn[ucCellIdx+1].ptPdcchHiCfiPbchPara);//L1
-                        atDmaLinkParam[1].udSize = sizeof(T_MacFpgaPdcchInfo);
-                        atDmaLinkParam[1].udDirection = 0;
-                        gptDlFreDbgCnt->atPdcchDbgCnt[ucCellIdx+1].audMacFpgaPdcchInfoAddr[ucSubFrm]  = (UINT32)(atDmaLinkParam[1].pEaddr);
-
-                        //启动DDMA
-                        OSS_DDMA_LinkCopy(tDevHandle.audDdmaChHandle[0],
-                                &atDmaLinkParam[0],
-                                2,
-                                &gaudPdcchCellTransID[ucCellIdx+1][0]);
-                    }
-
-                }
-
-                if(1 == gaudDlCellEnableFlag[ucCellIdx])
-                {
-                    ucRealCellIdx = gpatCmac2FpgaCellInfoL1[ucCellIdx]->ucCellIndex;
-
-                    //搬移PDSCH UE参数
-                    atDmaLinkParam[0].pEaddr = (VOID*)(RNLU_DLPHY_UE_INFO_ADDRESS+(guwDlSfn&0x0f)*RNLU_DLPHY_UE_INFO_PP_SIZE+(ucRealCellIdx)*sizeof(T_Rnlu2FpgaUeMsgInfo));//DDR;//DDR
-                    atDmaLinkParam[0].pIaddr = (VOID*)(gaptRnlu2FpgaUeMsgInfoL1[ucCellIdx]);//L1
-                    atDmaLinkParam[0].udSize = sizeof(T_Rnlu2FpgaUeMsgInfo);
-                    atDmaLinkParam[0].udDirection = 0;
-
-                    gptDlFreDbgCnt->atPdschDbgCnt[ucCellIdx].audRnlu2FpgaUeMsgInfoAddr[ucSubFrm] = (UINT32)atDmaLinkParam[0].pEaddr;
-                    OSS_DDMA_LinkCopy(tDevHandle.audDdmaChHandle[0],
-                            &atDmaLinkParam[0],
-                            1,&gaudDlFreUeMsgTransID[ucCellIdx]);
-
-                    App_Pdcch_Proc(ucCellIdx,guwDlSfn,udCurSymIdx);
-
-   
-                    }
-                    /* idt  log print*/
-                    if (0 < gaucHaveDlUe[ucCellIdx])
-                    {
-                        if(1 == gaucRnluDataIsTimeOver[ucCellIdx])
-                        {
-                            gptDlFreDbgCnt->atPdschDbgCnt[ucCellIdx].udRnluDataTimeOutCnt++;
-                        }
-                        else
-                        {
-                            gptDlFreDbgCnt->atPdschDbgCnt[ucCellIdx].udRnluDataArriveOkCnt++;
-                        }
-                    }
-                   
-
-
-                    App_RsPSssGen_Proc(ucCellIdx,guwDlSfn,udCurSymIdx);
-
-
-
-                   APP_DLFreoffCompenProc( ucCellIdx, udCurSymIdx);
-
-                    App_DlFreDataMove_Proc(ucCellIdx,udCurSymIdx);
-
-
-
-                }/*if(1 == gaudDlCellEnableFlag[ucCellIdx])*/
-
-            }/*for(ucCellIdx = 0; ucCellIdx < gucDlMaxCellNum; ucCellIdx++)*/
-
-            if(1 == gudDlCoreEmtcCellEnable)  /*本core处理的所有小区中，有一个小区使能了emtc就需要进行下面表格的搬移*/
-            {
-                //Mpdcch RE个数表格搬移
-    			atDmaLinkParam[0].pEaddr = (VOID *)TAB2_MPDCCH_UINT8;//L2
-    			atDmaLinkParam[0].pIaddr = (VOID *)(gptMpdcchSymLevelProcBuf->aucMPdcchTable2);//L1
-    			atDmaLinkParam[0].udSize = 1008*2;
-    			atDmaLinkParam[0].udDirection = 0;
-    			//启动DDMA
-    			OSS_DDMA_LinkCopy(tDevHandle.audDdmaChHandle[0],
-    					&atDmaLinkParam[0],
-    					1,
-    					&udMpdcchTABTransID);
-    			//等待搬移完成，后续需要优化流水
-    			OSS_DDMA_LinkWait(tDevHandle.audDdmaChHandle[0],udMpdcchTABTransID);
-                for(ucCellIdx = 0; ucCellIdx < gucDlMaxCellNum; ucCellIdx++)   //TODO:none
-                {
-                    App_MPdcch_PreProc(ucCellIdx,guwDlSfn,udCurSymIdx);
-                    App_MPdcch_BitProc(ucCellIdx,guwDlSfn,udCurSymIdx);
-                }
-            }
-			
-            
-            gptDlFreDbgCnt->udDlFreProcDot = 7;
-            if((1 == gudTbDataCopyFlag)&&((APP_DL_CELL_MODE_MACRO6 == gucDlCellMode)||(APP_DL_CELL_MODE_MACRO12 == gucDlCellMode)))
-            {
-                //等待TB buffer中后面108544字节搬移完成
-                //OSS_DDMA_LinkWait(gudDlTBDataHdl,gudTBDataTransID);
-
-                //等待CCH freq复用TB0 buf完成再启动TB0数据搬移
-
-                gudFirstPdschFlag = 1;   //保证只有第一个进pdsch的小区等待pdcch的DDMA
-                OSS_DDMA_LinkWait(gaudDlFreqChHandleMacro[gucDlCellMode&0x1],gudDlFreTransIDMacro[gucDlCellMode&0x1]);
-                gudDlFreTransIDMacro[gucDlCellMode&0x1] = 0xffffffff;
-
-                atDmaLinkParam[0].pEaddr = (VOID*)((UINT32) (gapucDlTbDataL2Addr[guwDlSfn&0x01]) + FIC_OFFSET);//L2
-                atDmaLinkParam[0].pIaddr = (VOID*)(gpucDlTbDataL1Addr);//L1
-                atDmaLinkParam[0].udSize = 132480;
-                atDmaLinkParam[0].udDirection = 0;
-
-                gptDlFreDbgCnt->audTBData0Addr[guwDlSfn & 0x1][1] = atDmaLinkParam[0].pEaddr;
-
-                //启动DDMA
-                OSS_DDMA_LinkCopy(tDevHandle.audDdmaChHandle[0],
-                        &atDmaLinkParam[0],
-                        1,
-                        &gudTbDataTransID);
-                gudTbDataWaitFlag = 1;
-
-            }
-
-            for(ucCellIdx = 0; ucCellIdx < gucDlMaxCellNum; ucCellIdx++)
-            {
-                if(1 == gaucCFINum[ucCellIdx])
-                {
-
-                    App_PdschPre_Proc(ucCellIdx,guwDlSfn,udCurSymIdx);
-
-                }
-            }
-
-        }
+        udCoreId0 = 0;
     }
     else
     {
-        if(5 == gudBPQMode)
-        {
-            if((1 == gudDlAcSendTestFlag)||((1 == gpatAcProcStat[0]->ucActive) && (gpatAcProcStat[0]->wAcTimeFrameSubNo == guwDlSfn)))
-            {
-              //gtDlAcDbgCnt.udAcCount2++;
-
-              //DspUsedRate
-              gudDlAppSymCost = OSS_CLK_GetCycle() - gudDlAppSymStart;
-              gudDspLoad = gudDspLoad + gudDlAppSymCost;
-              return;
-            }
-        }
-
-        if(1 == gucDlRctEnableFlg)
-        {
-            App_DlRctProc(udCurSymIdx,&atDmaLinkParam[0]);
-        }
-        else
-        {
-#ifndef SIMULATION
-            memset(&gaudDlAcParaReadyFlag[0], 0, sizeof(gaudDlAcParaReadyFlag));
-#endif
-                
-            for(ucCellIdx = 0; ucCellIdx < gucDlMaxCellNum; ucCellIdx++)
-            {
-
-                if(1 == gaudDlCellEnableFlag[ucCellIdx])
-                {
-
-                    if((1 < gaucCFINum[ucCellIdx])&&(1 == udCurSymIdx))
-                    {
-                        App_PdschPre_Proc(ucCellIdx,guwDlSfn,udCurSymIdx);
-
-                    }
-                    App_PbchGen_Proc(ucCellIdx,guwDlSfn,udCurSymIdx);
-
-
-
-                    if((udCurSymIdx < gaucCFINum[ucCellIdx])&&((APP_DL_CELL_MODE_TMM == gucDlCellMode)||(APP_DL_CELL_MODE_FMM == gucDlCellMode)))
-                    {
-                        //MM下控制符号按照符号做
-                        //MM下由于频域数据buf只有一个需要等之前频域数据搬完才能继续下一个符号处理
-
-                        OSS_DDMA_LinkWait(gaudDlFreqChHandle[ucCellIdx][(udCurSymIdx)%7],gudDlFreTransID[ucCellIdx][udCurSymIdx%7]);
-
-                        gudDlFreTransID[ucCellIdx][udCurSymIdx%7] = 0xffffffff;
-
-                    
-
-                        if (APP_DL_CELL_MODE_TMM == gucDlCellMode)
-                        {
-                            gptDL_L2Buffer_MM->gaucRsv0[(guwDlSfn&0x0f)*28+(gudCoreId%4)*14 + udCurSymIdx-1] =1;
-                        }
-                        else
-                        {
-                            gptDL_L2Buffer_DM->gaucRsv0[(guwDlSfn&0x0f)*28+(gudCoreId%4)*14 + udCurSymIdx-1] =1;
-                        }
-                        App_Pdcch_Proc(ucCellIdx,guwDlSfn,udCurSymIdx);
-                        App_RsPSssReMap_Proc(ucCellIdx,guwDlSfn,udCurSymIdx);
-                        App_DlFreDataMove_Proc(ucCellIdx,udCurSymIdx);
-
-
-                    }
-                    else
-                    {
-
-
-                        App_Pdsch_Proc(ucCellIdx,guwDlSfn,udCurSymIdx);
-                        App_MPdcch_SymProc(ucCellIdx, guwDlSfn, udCurSymIdx);
-                        App_Pbch_Proc(ucCellIdx,guwDlSfn,udCurSymIdx);
-
-                        if(13 == udCurSymIdx)
-                        {
-                            if((APP_DL_CELL_MODE_TMM == gucDlCellMode)||(APP_DL_CELL_MODE_FMM == gucDlCellMode))
-                            {
-                                atDmaLinkParam[0].udSize = sizeof(T_Cmac2PdlmInformSDMASchdResult) ;
-                            }
-                            else
-                            {
-                                atDmaLinkParam[0].udSize = sizeof(T_Cmac2PdlmInformSDMASchdResult) - MAX_NORMALBF_NUM*sizeof(T_FDDNonSDMAUEPmiInfo) -MAX_NORMALBF_NUM*sizeof(T_FDDSDMAUEDoaPmiInfo);
-                            }
-                            ucRealCellIdx = gpatCmac2FpgaCellInfoL1[ucCellIdx]->ucCellIndex;
-
-                            atDmaLinkParam[0].pEaddr = (VOID*)((T_Cmac2PdlmInformSDMASchdResult *)(CMAC_DLPHY_WCALC_INFO_ADDRESS+(guwNextDlSfn&0xf)*CMAC_DLPHY_WCALC_INFO_PP_SIZE+(ucRealCellIdx)*sizeof(T_Cmac2PdlmInformSDMASchdResult)));
-                            atDmaLinkParam[0].pIaddr = (VOID*)(gpatCmac2PdlmInformSDMASchdResultL1[ucCellIdx]);
-                            
-                            atDmaLinkParam[0].udDirection = 0;
-
-                            OSS_DDMA_LinkCopy(tDevHandle.audDdmaChHandle[0],
-                                    &atDmaLinkParam[0],
-                                    1,
-                                    &gaudWInfoTransID[ucCellIdx]);
-                        }
-
-                        App_RsPSssReMap_Proc(ucCellIdx,guwDlSfn,udCurSymIdx);
-
-
-                        APP_DLFreoffCompenProc( ucCellIdx, udCurSymIdx);
-
-                        App_DlFreDataMove_Proc(ucCellIdx,udCurSymIdx);
-
-                     
-
-
-                        if((13 == udCurSymIdx) && ((APP_DL_CELL_MODE_TMM == gucDlCellMode) || (APP_DL_CELL_MODE_FMM == gucDlCellMode)))
-                        {
-     
-                            if ((APP_DL_CELL_MODE_TMM == gucDlCellMode) || (gudDDMA_SEL_FLG == 0))
-                            {
-                            OSS_DDMA_LinkWait(gaudDlFreqChHandle[ucCellIdx][(0)%7],gudFastDmaDlFreTransID[ucCellIdx][0%7]);
-                            }
-                            if(APP_DL_CELL_MODE_TMM == gucDlCellMode)
-                            {
-                                gptDL_L2Buffer_MM->gaucRsv0[(guwDlSfn&0x0f)*28+udCurSymIdx+14*(gudCoreId%4)] = 1;
-                            }
-                            else
-                            {
-                                gptDL_L2Buffer_DM->gaucRsv0[(guwDlSfn&0x0f)*28+udCurSymIdx+14*(gudCoreId%4)] = 1;
-                            }
-
-                        }
-#ifndef SIMULATION
-                        if((1 == gaudFftCfgFlag[ucCellIdx])&&(APP_DL_CELL_MODE_FMM  != gucDlCellMode))
-                        {
-                            App_DlAc_Proc(ucCellIdx, udCurSymIdx);
-                        }
-#endif
-                    }
-
-                }/*if(1 ==  gaudDlCellEnableFlag[ucCellIdx])*/
-
-                if ((APP_DL_CELL_MODE_FMM != gucDlCellMode) || (gudDDMA_SEL_FLG == 0))
-                {
-                    gudDlFreTransID[ucCellIdx][udCurSymIdx%7] = 0xffffffff;
-                }
-                
-            }/*for(ucCellIdx = 0; ucCellIdx < gucDlMaxCellNum; ucCellIdx++)*/
-        }
+        udCoreId0 = gudCoreId;
     }
-    
-    if (13 == udCurSymIdx)
+	if((0 < gudIdftNLayer) && (gucDftPointCnt > 0))
+	{
+     	OSS_DDMA_LinkWait(
+            gudQmanQueHdl,
+            gaudIdftInitTransID[gwDftInitTabCnt - 1]);
+		*gpudPuschDbgDot[0] = 87;
+		CEVA_DFT_GENERIC_INIT1(
+			gucDftPointCnt,
+			gaucDftIdx,
+			gaptPuschIDFTProcDataIn[0]->psdInitDftBuffer);
+		*gpudPuschDbgDot[0] = 88;
+		if(0 < gucMergCellNum)
+		{
+			gatDDmaLinkCpyParam[0].pEaddr = gaudIdftInitBufferDDR;
+			gatDDmaLinkCpyParam[0].pIaddr = gaptPuschIDFTProcDataIn[0]->psdInitDftBuffer;
+			gatDDmaLinkCpyParam[0].udSize = 6500 * 4;
+			gatDDmaLinkCpyParam[0].udDirection = 1;
+
+			OSS_DDMA_LinkCopy(
+				gudQmanQueHdl,
+				gatDDmaLinkCpyParam,
+				1,
+				&udTransID);
+		}
+	}
+    if (1 == gudIdftNLayer)
     {
-        App_DLTimer_Recfg();
+        ucCellIdx = gaucPuschCellIdx[0];
+		*gpudPuschDbgDot[ucCellIdx] = 89;
+        ptPuschIDFTProcDataIn = gaptPuschIDFTProcDataIn[ucCellIdx];
+        ptPuschIDFTProcDataIn->pxwXrcOut = gapxwIDFTDataIn[0];
+        App_PuschIdft_Tb(
+			ptPuschIDFTProcDataIn,
+			gaptPuschIDFTProcDataOut[ucCellIdx],
+		    udCoreId0,
+			ucCellIdx,
+			0,
+			0);
+		*gpudPuschDbgDot[ucCellIdx] = 90;
+		/*Idt Prob*/
+		tDatPara.ucLayerNum = 1;
+		PHX_Idt(6,guwUlSfn,0,ucCellIdx,&tIdtData[0],&tDatPara);
+		/*Idt Prob end*/
+		
     }
-    
+    else if(1 < gudIdftNLayer)
+    {
+        for (ucCellCnt = 0; ucCellCnt < gucPuschIdftBitCellNum; ucCellCnt++)
+        {
+            ucCellIdx = gaucPuschCellIdx[ucCellCnt];
+			*gpudPuschDbgDot[ucCellIdx] = 91;
+            for (ucLayerCnt = 0; ucLayerCnt < gauCellLayerNum[ucCellCnt]; ucLayerCnt++)
+            {
+                if (gudIdftNLayer != ucLayerNum)
+                {
+                    gatDDmaLinkCpyParam[0].pEaddr = gapxwEquTbOut[ucLayerNum];
+    			    gatDDmaLinkCpyParam[0].pIaddr = (UINT8 *)gapxwIDFTDataIn[ucLayerNum&0x1];
+    			    gatDDmaLinkCpyParam[0].udSize = 12 * 1200 * sizeof(CMPL16);
+    			    gatDDmaLinkCpyParam[0].udDirection = 0;
+                
+                    OSS_DDMA_LinkCopy(
+                        gudQmanQueHdl,
+                        gatDDmaLinkCpyParam,
+                        1,
+                        &gadIdftInTransID[ucLayerNum]);
+                    ucLayerNum++;
+                }
+                else
+                {
+                    /*为bit级第一个TB准备数据*/
+                    gatDDmaLinkCpyParam[0].pEaddr = gapxwIdftTbOut[0];
+    			    gatDDmaLinkCpyParam[0].pIaddr = (UINT8 *)gapxwIDFTDataIn[gudIdftNLayer&0x1];
+    			    gatDDmaLinkCpyParam[0].udSize = 12 * 1200 * sizeof(CMPL16);
+    			    gatDDmaLinkCpyParam[0].udDirection = 0;
+                    
+                    OSS_DDMA_LinkCopy(
+                        gudQmanQueHdl,
+                        gatDDmaLinkCpyParam,
+                        1,
+                        &gaudTransID[0]);
+                    ucLayerNum++;
+                }
 
-    //DspUsedRate
-    gudDlAppSymCost = OSS_CLK_GetCycle() - gudDlAppSymStart;
-    gudDspLoad = gudDspLoad + gudDlAppSymCost;
-    return;
+                ptPuschIDFTProcDataIn = gaptPuschIDFTProcDataIn[ucCellIdx];
+                ptPuschIDFTProcDataIn->pxwXrcOut = gapxwIDFTDataIn[ucLayerNum&0x1];
+                App_PuschIdft_Tb(
+        			ptPuschIDFTProcDataIn,
+        			gaptPuschIDFTProcDataOut[ucCellIdx],
+		            udCoreId0,
+        			ucCellIdx,
+        			ucLayerCnt,
+        			(ucLayerNum-2));
+				/*Idt Prob*/
+				tDatPara.ucLayerNum = ucLayerNum;
+							
+				PHX_Idt(6,guwUlSfn,ucLayerCnt,ucCellIdx,&tIdtData[0],&tDatPara);
+				/*Idt Prob end*/
+            }
+            *gpudPuschDbgDot[ucCellIdx] = 92;
+        }
+    }
+	if((0 < gudIdftNLayer) && (0 < gucMergCellNum) && (gucDftPointCnt > 0))
+	{
+		OSS_DDMA_LinkWait(
+	        gudQmanQueHdl,
+	        udTransID);
+		*gpudPuschDbgDot[0] = 93;
+	}
+
+	App_PuschPreBit_Proc();
+	if((1 == gtULCycle.udCycleFlag0) && (0 != gucPuschIdftBitCellNum))
+	{
+		gtULCycle.udIdftProc = OSS_CLK_GetCycle() - udCycle;
+	}
 }
 
-
-
-
-输出现有架构或模块的处理流程、buff划分、效率情况，提出缺陷和优化点。
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-void App_DlFre_Proc(UINT32 udCurSymIdx)
-__attribute__((section(".csect APP_DLFRE_L1P")));按符号处理
-符号0：
-	小区使能标志置1时：
-		取L1中CMAC下的小区参数里的ucCellIndex得到ucRealCellIdx
-		根据ucRealCellIdx、子帧号从DDR中将PDCCH参数搬移到L1的gatPdcchHiCfiProcParaIn[0].ptPdcchHiCfiPbchPara,DDMA。
-	将中断guwDlSfn = guwDlIntSfn;，并得到guwNextDlSfn = NextNumSubFrm(guwDlSfn,1);
-	判断若gudTbDataCopyFlag == 1，从L2中搬TB buffer的后 132480字节到L1里对应TB buffer的后132480字节，DDMA。
-	通过比较当前guwDlSfn和BITA回写的sfn，判断TB数据是否超时，gaucRnluDataIsTimeOver置1后，没用。
-	小区循环：
-		若小区使能：
-			DDMA等待当前小区搬移的PDCCH参数。
-		若小区数大于1，且不是最后一个小区：
-			若下一个小区使能：
-				从DDR搬移下一个小区的PDCCH预处理和处理参数；
-			若当前小区使能：
-				从DDR搬RNLU下发的UE数据和控制信息T_Rnlu2FpgaUeMsgInfo
-				处理PDCCH，App_Pdcch_Proc(ucCellIdx,guwDlSfn,udCurSymIdx);
-				产生RSPSS，App_RsPSssGen_Proc(ucCellIdx,guwDlSfn,udCurSymIdx);
-				           APP_DLFreoffCompenProc( ucCellIdx, udCurSymIdx);
-                   App_DlFreDataMove_Proc(ucCellIdx,udCurSymIdx);
-  若emtc小区使能，1 == gudDlCoreEmtcCellEnable：
-  	搬MPDCCH RE个数表，从L2到L1，并等待搬移完成；
-  	小区循环，处理App_MPdcch_PreProc(ucCellIdx,guwDlSfn,udCurSymIdx)，App_MPdcch_BitProc(ucCellIdx,guwDlSfn,udCurSymIdx); 
-	若gudTbDataCopyFlag == 1，宏站：
-		gudFirstPdschFlag = 1; 
-		等待DDMA搬移完成，gudDlFreTransIDMacro；
-		启动DDMA，从L2搬移TBData的前132480字节到L1的gpucDlTbDataL1Addr。
-		gudTbDataWaitFlag = 1;
-	小区循环，若CFI==1，App_PdschPre_Proc(ucCellIdx,guwDlSfn,udCurSymIdx);
-不为符号0：
-	小区循环：
-		若小区使能：
-			若cfi大于1且symIdx==1，App_PdschPre_Proc(ucCellIdx,guwDlSfn,udCurSymIdx);
-			App_PbchGen_Proc(ucCellIdx,guwDlSfn,udCurSymIdx);
-			App_Pdsch_Proc(ucCellIdx,guwDlSfn,udCurSymIdx);
-			App_MPdcch_SymProc(ucCellIdx, guwDlSfn, udCurSymIdx);
-			App_Pbch_Proc(ucCellIdx,guwDlSfn,udCurSymIdx);
-			若symIdx==13，从DDR搬SDMA调度信息到L1
-			App_RsPSssReMap_Proc(ucCellIdx,guwDlSfn,udCurSymIdx);
-      APP_DLFreoffCompenProc( ucCellIdx, udCurSymIdx);
-      App_DlFreDataMove_Proc(ucCellIdx,udCurSymIdx);			
-      若1 == gaudFftCfgFlag[ucCellIdx]且不为FMM时，App_DlAc_Proc(ucCellIdx, udCurSymIdx);？？
-如果13 == udCurSymIdx：
-	App_DLTimer_Recfg();
-	
-	
-输出现有架构或模块的处理流程、buff划分、效率情况，提出缺陷和优化点。
