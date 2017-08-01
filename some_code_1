@@ -1,0 +1,39 @@
+App_PuschIdft_Proc():
+
+if((0 < gudIdftNLayer) && (gucDftPointCnt > 0))：
+	DDMA等待，  OSS_DDMA_LinkWait(gudQmanQueHdl,gaudIdftInitTransID[gwDftInitTabCnt - 1]);
+	CEVA_DFT_GENERIC_INIT1
+	若有合并小区，需要将gaptPuschIDFTProcDataIn[0]->psdInitDftBuffer搬到DDR中gaudIdftInitBufferDDR
+if (1 == gudIdftNLayer)：
+	获取小区索引，ucCellIdx = gaucPuschCellIdx[0];
+	ptPuschIDFTProcDataIn->pxwXrcOut先指向PING空间，12*1200dw
+	App_PuschIdft_Tb(ptPuschIDFTProcDataIn,gaptPuschIDFTProcDataOut[ucCellIdx],udCoreId0,ucCellIdx,0,0):
+		DDMA等待,等待ucWaitLayerIdx = 0搬移完成
+		若有合并UE：
+			将均衡结果从片外搬移到片内，放在gapxwEquOut[gaptCellDemInfo[ucCellIdx]->wSfnSubFrm & 1][ucCellIdx][0]
+		IDFT输出指向pxwXrcOut空间，ptPuschIDFTProcDataOut->pxwIdftOut = ptPuschIDFTProcDataIn->pxwXrcOut;
+		OBM_PuschIDFTProc()
+		将idftOut从片内搬到片外pEaddr = (UINT8 *)gapxwIdftTbOut[ucWaitLayerIdx]
+若if((0 < gudIdftNLayer) && (0 < gucMergCellNum) && (gucDftPointCnt > 0))
+	DDMA等待，从DDR搬psdInitDftBuffer到L1D完成。
+App_PuschPreBit_Proc();
+
+
+App_PuschPreIdft_Proc：在PUCCH_Proc里的小区循环ucCellCnt=0时调用。
+		gucDftPointCnt = 0;
+    gudIdftNLayer = 0;
+    memset(aucDuplicate,0,34);
+		memset(gaucDftIdx,0,20);
+		memset((UINT8 *)gaucInitDftPnt,	0xFF,APP_MAX_ULCELL_NUM * MAX_PUSCH_UE_NUM_PER_TTI);
+    小区循环按gucPuschIdftBitCellNum：
+    	计算当前小区IDFT处理的流数
+    	流数循环：
+    		计算每流的gapxwIdftTbOut地址
+    	UE循环，puschUE+合并UE：
+    		根据每个UE的RB数，查*(pucInitDftPnt + ucUeCnt) = TAB_RBNUM_IDX34_UINT8[ptPuschUESchdInfo->ucRbNum];得到当前UE的ucDftIdx，若为有效索引，则记录到gaucDftIdx[gucDftPointCnt] = ucDftIdx;且gucDftPointCnt++
+    		找出当前UE的激活索引
+    若if(0 < gudIdftNLayer)
+    	若if(0 < gucDftPointCnt)
+ 				CEVA_DFT_GENERIC_INIT
+ 			DDMA搬移片外gapxwEquTbOut到片内gapxwIDFTDataIn[0]，句柄为gadIdftInTransID
+    	
