@@ -1,0 +1,46 @@
+预处理：0==cellCnt时，根据核号进行IDFT预处理。
+1.首先得到当前小区IDFT需要处理的流数gauCellLayerNum[cellCnt]，和本核需要处理的总流数gudIdfNLayer
+2.计算每流对应的均衡数据地址gapxwEquTbOut[layerNum]
+计算每流对应的IDFT输出地址，gapxwIdftTbOut[0]=gapxwPucchDataIn[cellIdx],gapxwIdftTbOut[1~7]=gapxwEquTbOut[1~7]
+3.UE循环，计算每个UE的IDFT索引（0~33）和激活UE索引（）?
+4.根据UE IDFT数、UE IDFT索引进行初始化CEVA_DFT_GENERIC_INIT，配DDMA从DDR将DFT参数表搬移到L1D
+5.从DDR将第一流的L2D均衡输出数据gapxwEquTbOut[0]搬移到IDFT输入buffer的PING，gapxwIDFTDataIn[0]。
+
+App_PuschIdft_Proc:
+1.首先等待预处理中CEVA_DFT_GENERIC_INIT的最后一个参数表（gaudIdftInitTransID[gwDftInitTabCnt-1]）搬移完成。
+2.CEVA_DFT_GENERIC_INIT1,对IDFT旋转因子表初始化
+3.若有合并小区，则将IDFT初始化的结果从L1D再搬移到DDR中。
+4.若本核处理流数为1，IDFT输入pxwXrcOut就为gapxwIDFTDataIn[0]。调用app_puschIdft_Tb()函数,Tbidx=0,waitLayerIdx=0
+4.1. 等待预处理中搬移均衡输出到L1D完成
+4.2. 若有合并UE，将L2D均衡输出搬移到DDR，gaptEquBuffer
+4.3. IDFT输出指向pxwXrcOut，即OBM_IDFTProc模块输入输出指向同一块buffer。
+4.4. 将OBM模块输出的IDFT结果通过DDMA，搬移到gapxwIdftTbOut[0]即gapxwPucchDataIn[cellIdx]
+5.若本核处理流数大于1，按小区/小区内流数循环处理
+5.1. 处理流不为最后一流时，从L2D搬移当前流均衡输出gapxwEquTbOut[layerNum]到gapxwIDFTDataIn[layerNum&1]，即提前搬下一流均衡输出
+     当处理最后一流时，把第一流IDFT输出搬到gapxwIDFTDataIn[0]，因为最后一流时IDFT输出肯定是在PANG buffer。提前搬到apxwDeModScrMultIn指向的空间。
+5.2. IDFT输出根据流数指向gapxwIDFTDataIn[0/1]
+5.3. OBM模块输入输出指向同一buffer
+6.若有合并小区，等待搬移均衡数据到DDR完成。
+7.App_puschPreBit_Proc()
+
+
+OBM_PuschIDFTProc:
+1.OBM_PuschIntraSymOffEst:
+1.1. 非合并UE循环，UeIdx = *(UeIdxMap[0] + FreUeCnt)
+1.2. OBM_PuschUeIdftFlag:根据UE类型判断UeIdftFlag
+1.3. 若超级小区选择性合并关闭且UeIdftFlag == 1，则continue，否则UeIdftExist++
+1.4. OBM_PuschIntraSymPhase 计算UE的符号内相位。算法为 
+     此汇编函数r0为输出相位值，使用的buffer为ptPuschIDFTPrcoBuffer->pxwIdftOutBuf + RBSlot0Start*12
+     a0为-2pi/(15000*M)定标表，a1为频偏，a2为RBNum
+     每个Loop处理4个RB，即n从0~48
+1.5. OBM_TaylorExp32In 根据1.4中计算的相位值，对全带宽进行泰勒基数展开得到exp值。
+     输入为ptPuschIDFTPrcoBuffer->pxwIdftOutBuf，输出为ptPuschIDFTPrcoBuffer->pxwIntraSymFreq
+2.非合并UE循环，OBM_PuschUeIdftFlag，这里和上面有重复，可优化。
+3.根据当前UE的DFT索引，查表idftFactor=TAB_IDFT_FACTOR_INT16[ucDftIndex]
+4.按符号循环进行12个符号的IDFT
+5.若非子帧内跳频，按符号进行频偏补偿，OBM_PuschDataFreqOffComp
+  r0为输入，CEVA_DFT_GENERIC的输出
+  r1为符号内频偏相位的exp值输入ptPuschIDFTPrcoBuffer->pxwIntraSymFreq
+  r2为补偿结果输出ptPuschIDFTProcDataOut->pxwIdftOut
+  a0为符号间频偏相位的exp值输入，gaptPuschIDFTProcDataIn->pxwSymFreq
+  a1为IDFTFactor，a2为RBNum
