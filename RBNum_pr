@@ -1,0 +1,316 @@
+#include <stdio.h>
+#include <stdlib.h>
+
+#define UCHAR unsigned char
+
+//int main()
+//{
+//	UCHAR ucUeCnt, ucDftIdx, ucDftCnt, gucDftPointCnt = 0;
+//	UCHAR aucDuplicate[34] = { 0 }, gaucDftIdx[20] = { 0 }, ucAct[34];
+//
+//	for (ucUeCnt = 0; ucUeCnt < 4; ucUeCnt++)
+//	{
+//	
+//		//ucDftIdx = rand()%34;
+//		if (ucUeCnt == 0)
+//			ucDftIdx = 3;
+//		else if (ucUeCnt == 1)
+//			ucDftIdx = 5;
+//		else if (ucUeCnt == 2)
+//			ucDftIdx = 5;
+//		else
+//			ucDftIdx = 6;
+//		if ((0 == aucDuplicate[ucDftIdx]) && (0xff != ucDftIdx))
+//		{
+//			gaucDftIdx[gucDftPointCnt] = ucDftIdx;
+//			gucDftPointCnt++;
+//			aucDuplicate[ucDftIdx] = 1;
+//		}
+//
+//		for (ucDftCnt = 0; ucDftCnt < gucDftPointCnt; ucDftCnt++)
+//		{
+//			if (gaucDftIdx[ucDftCnt] == ucDftIdx)
+//			{
+//				*(ucAct + ucUeCnt) = ucDftCnt;
+//				break;
+//			}
+//		}
+//	}
+//
+//
+//	printf("hello world!");
+//	while (1);
+//	return 1;
+//}
+
+UCHAR RBNumList[31] = { 1, 2, 3, 4, 5, 6, 8, 9, 10, 12, 15, 16, 18, 20, 24, 25, 27,
+30, 32, 36, 40, 45, 48, 50, 54, 60, 64, 72, 75, 80, 81 };
+UCHAR RBMatched[100000][16] = {0};
+UCHAR Ue[16] = { 0 };
+
+int judgeRBNumValid(UCHAR RBNum)
+{
+	UCHAR i;
+	for (i = 0; i < 31; i++)
+	{
+		if (RBNumList[i] == RBNum)
+			return 1;
+	}
+	return 0;
+}
+
+int calcLastTwoUe(UCHAR *Ue, UCHAR RBidx, UCHAR k, int *cnt)
+{
+	UCHAR i;
+	Ue[14] = RBNumList[RBidx];
+	Ue[15] = 90 - RBNumList[0] * (15 - k);
+	for (i = 0; i < k; i++)
+	{
+		Ue[15] = Ue[15] - Ue[14 - i];
+	}
+	if ((1 == judgeRBNumValid(Ue[15])) && (Ue[14] <= Ue[15]))
+	{
+		for (i = 0; i < 14; i++)
+		{
+			RBMatched[*cnt][i] = Ue[i];
+		}
+		RBMatched[*cnt][14] = Ue[14];
+		RBMatched[*cnt][15] = Ue[15];
+		(*cnt)++;
+	}
+}
+
+
+int main()
+{
+	UCHAR i,j,k,m,n,UeNum,RB1Num;
+	UCHAR m0, m1, m2, m3, m4, m5,m6,m7,m8,m9,m10,m11;
+	int cnt0,cnt1,cnt2,cnt3,cnt4,cnt5,cnt6,cnt7,cnt8,cnt9,cnt10,cnt11;
+	UeNum = 16;
+	k = 14;
+	//for (i = 0; i < 14; i++)
+	//{
+	//	Ue[i] = RBNumList[0];
+	//}
+	//for (m = 1; m < 31; m++)
+	//{
+	//	Ue[14] = RBNumList[m];
+	//	Ue[15] = 90 - RBNumList[0] * 14 - Ue[14];
+	//	if ((1 == judgeRBNumValid(Ue[15])) && (Ue[14] <= Ue[15]))
+	//	{
+	//		RBMatched[cnt][14] = Ue[14];
+	//		RBMatched[cnt][15] = Ue[15];
+	//		cnt++;
+	//	}
+	//}
+	//Ue[RB1Num] = RBNumList[m];
+	//for (n = m; n < 22; n++)
+	//{
+	/*Ue[14] = RBNumList[n];
+	Ue[15] = 90 - RBNumList[0] * 13 - Ue[13] - Ue[14];
+	if ((1 == judgeRBNumValid(Ue[15])) && (Ue[14] <= Ue[15]))
+	{
+	RBMatched[cnt][13] = Ue[13];
+	RBMatched[cnt][14] = Ue[14];
+	RBMatched[cnt][15] = Ue[15];
+	cnt++;
+	}*/
+	//}
+
+
+	cnt0 = 0;
+	RB1Num = 13;
+	for(i = 0; i < RB1Num; i++)
+	{
+		Ue[i] = RBNumList[0];
+	}
+	for (m = 1; m < 31; m++)
+	{
+		Ue[RB1Num] = RBNumList[m];
+		for (n = m; n < 22; n++)
+		{
+			calcLastTwoUe(&Ue, n, 15 - RB1Num, &cnt0);//34
+		}
+	}
+
+	cnt1 = 0;
+	RB1Num = 12;
+	for (i = 0; i < RB1Num; i++)
+	{
+		Ue[i] = RBNumList[0];
+	}
+	for (m0 = 1; m0 < 31; m0++)
+	{
+		Ue[RB1Num] = RBNumList[m0];
+		for (m1 = m0; m1 < 22; m1++)
+		{
+			Ue[RB1Num+1] = RBNumList[m1];
+			for (m2 = m1; m2 < 22; m2++)
+			{
+				calcLastTwoUe(&Ue, m2, 15 - RB1Num, &cnt1);//232
+			}
+		}
+	}
+
+	cnt2 = 0;
+	RB1Num = 11;
+	for (i = 0; i < RB1Num; i++)
+	{
+		Ue[i] = RBNumList[0];
+	}
+	for (m0 = 1; m0 < 31; m0++)
+	{
+		Ue[RB1Num] = RBNumList[m0];
+		for (m1 = m0; m1 < 22; m1++)
+		{
+			Ue[RB1Num + 1] = RBNumList[m1];
+			for (m2 = m1; m2 < 22; m2++)
+			{
+				Ue[RB1Num + 2] = RBNumList[m2];
+				for (m3 = m2; m3 < 22; m3++)
+				{
+					calcLastTwoUe(&Ue, m3, 15 - RB1Num, &cnt2);//784
+				}
+			}
+		}
+	}
+
+	cnt3 = 0;
+	RB1Num = 10;
+	for (i = 0; i < RB1Num; i++)
+	{
+		Ue[i] = RBNumList[0];
+	}
+	for (m0 = 1; m0 < 31; m0++)
+	{
+		Ue[RB1Num] = RBNumList[m0];
+		for (m1 = m0; m1 < 22; m1++)
+		{
+			Ue[RB1Num + 1] = RBNumList[m1];
+			for (m2 = m1; m2 < 22; m2++)
+			{
+				Ue[RB1Num + 2] = RBNumList[m2];
+				for (m3 = m2; m3 < 22; m3++)
+				{
+					Ue[RB1Num + 3] = RBNumList[m3];
+					for (m4 = m3; m4 < 22; m4++)
+					{
+						calcLastTwoUe(&Ue, m4, 15 - RB1Num, &cnt3);//2288
+					}
+				}
+			}
+		}
+	}
+
+	cnt4 = 0;
+	RB1Num = 9;
+	for (i = 0; i < RB1Num; i++)
+	{
+		Ue[i] = RBNumList[0];
+	}
+	for (m0 = 1; m0 < 31; m0++)
+	{
+		Ue[RB1Num] = RBNumList[m0];
+		for (m1 = m0; m1 < 22; m1++)
+		{
+			Ue[RB1Num + 1] = RBNumList[m1];
+			for (m2 = m1; m2 < 22; m2++)
+			{
+				Ue[RB1Num + 2] = RBNumList[m2];
+				for (m3 = m2; m3 < 22; m3++)
+				{
+					Ue[RB1Num + 3] = RBNumList[m3];
+					for (m4 = m3; m4 < 22; m4++)
+					{
+						Ue[RB1Num + 4] = RBNumList[m4];
+						for (m5 = m4; m5 < 22; m5++)
+						{
+							calcLastTwoUe(&Ue, m5, 15 - RB1Num, &cnt4);//4974
+						}
+					}
+				}
+			}
+		}
+	}
+
+
+	cnt5 = 0;
+	RB1Num = 8;
+	for (i = 0; i < RB1Num; i++)
+	{
+		Ue[i] = RBNumList[0];
+	}
+	for (m0 = 1; m0 < 31; m0++)
+	{
+		Ue[RB1Num] = RBNumList[m0];
+		for (m1 = m0; m1 < 22; m1++)
+		{
+			Ue[RB1Num + 1] = RBNumList[m1];
+			for (m2 = m1; m2 < 22; m2++)
+			{
+				Ue[RB1Num + 2] = RBNumList[m2];
+				for (m3 = m2; m3 < 22; m3++)
+				{
+					Ue[RB1Num + 3] = RBNumList[m3];
+					for (m4 = m3; m4 < 22; m4++)
+					{
+						Ue[RB1Num + 4] = RBNumList[m4];
+						for (m5 = m4; m5 < 22; m5++)
+						{
+							Ue[RB1Num + 5] = RBNumList[m5];
+							for (m6 = m5; m6 < 22; m6++)
+							{
+								calcLastTwoUe(&Ue, m6, 15 - RB1Num, &cnt5);//9685
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	cnt6 = 0;
+	RB1Num = 7;
+	for (i = 0; i < RB1Num; i++)
+	{
+		Ue[i] = RBNumList[0];
+	}
+	for (m0 = 1; m0 < 31; m0++)
+	{
+		Ue[RB1Num] = RBNumList[m0];
+		for (m1 = m0; m1 < 22; m1++)
+		{
+			Ue[RB1Num + 1] = RBNumList[m1];
+			for (m2 = m1; m2 < 22; m2++)
+			{
+				Ue[RB1Num + 2] = RBNumList[m2];
+				for (m3 = m2; m3 < 22; m3++)
+				{
+					Ue[RB1Num + 3] = RBNumList[m3];
+					for (m4 = m3; m4 < 22; m4++)
+					{
+						Ue[RB1Num + 4] = RBNumList[m4];
+						for (m5 = m4; m5 < 22; m5++)
+						{
+							Ue[RB1Num + 5] = RBNumList[m5];
+							for (m6 = m5; m6 < 22; m6++)
+							{
+								Ue[RB1Num + 6] = RBNumList[m6];
+								for (m7 = m6; m7 < 22; m7++)
+								{
+									calcLastTwoUe(&Ue, m7, 15 - RB1Num, &cnt6);//20331
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	
+
+
+	printf("hello world!");
+	while (1);
+	return 1;
+}
